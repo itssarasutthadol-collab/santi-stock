@@ -429,108 +429,199 @@ function StockPage({stock,setStock}){
 // SALES PAGE — ราคาแก้ได้ + ส่วนลด + VAT
 // ════════════════════════════════════════════════════════
 function SalesPage({stock,setStock,setSales}){
-  const [kw,setKw]=useState('');
-  const [cart,setCart]=useState([]);
-  const [customer,setCustomer]=useState(null);
-  const [note,setNote]=useState('');
-  const [channel,setChannel]=useState('In-store');
-  const [vat,setVat]=useState(false);
-  const [globalDisc,setGlobalDisc]=useState('');
-  const [saving,setSaving]=useState(false);
-  const [msg,setMsg]=useState('');
-  const [importMsg,setImportMsg]=useState('');
-  const [importing,setImporting]=useState(false);
-  const xlsxOk=useXLSX();
+  const [kw,setKw]           = useState('');
+  const [cart,setCart]       = useState([]);
+  const [customer,setCustomer] = useState(null);
+  const [note,setNote]       = useState('');
+  const [channel,setChannel] = useState('In-store');
+  const [globalDisc,setGlobalDisc] = useState('');
+  const [saving,setSaving]   = useState(false);
+  const [msg,setMsg]         = useState('');
+  const [importMsg,setImportMsg] = useState('');
+  const [importing,setImporting] = useState(false);
+  const xlsxOk = useXLSX();
 
-  const sugs=useMemo(()=>{
-    if(!kw.trim())return[];
-    const words=kw.toLowerCase().split(/\s+/).filter(Boolean);
-    return PR.filter(p=>{const hay=(p[0]+' '+p[1]+' '+p[2]).toLowerCase();return words.every(w=>hay.includes(w));}).slice(0,15);
+  // VAT modes: 'included' = รวมแวทแล้ว | 'add' = บวกแวทเพิ่ม | 'none' = ไม่มีแวท
+  const VAT_LABELS = {
+    included: 'รวม VAT แล้ว (แสดงยอดแวทแยก)',
+    add:      'บวก VAT 7% เพิ่ม',
+    none:     'ไม่มี VAT',
+  };
+
+  const sugs = useMemo(()=>{
+    if(!kw.trim()) return [];
+    const words = kw.toLowerCase().split(/\s+/).filter(Boolean);
+    return PR.filter(p=>{
+      const hay = (p[0]+' '+p[1]+' '+p[2]).toLowerCase();
+      return words.every(w=>hay.includes(w));
+    }).slice(0,15);
   },[kw]);
 
-  const addToCart=p=>{
-    setCart(c=>{const ex=c.find(x=>x.sku===p[0]);if(ex)return c.map(x=>x.sku===p[0]?{...x,qty:x.qty+1}:x);return[...c,{sku:p[0],name:p[1],cat:p[2],unitPrice:p[3],sell:p[3],cost:stock[p[0]]?.cost||p[4],qty:1,discount:0}];});
+  // addToCart — default vatMode = 'none'
+  const addToCart = p => {
+    setCart(c=>{
+      const ex = c.find(x=>x.sku===p[0]);
+      if(ex) return c.map(x=>x.sku===p[0]?{...x,qty:x.qty+1}:x);
+      return [...c,{sku:p[0],name:p[1],cat:p[2],unitPrice:p[3],sell:p[3],cost:stock[p[0]]?.cost||p[4],qty:1,vatMode:'none'}];
+    });
     setKw('');
   };
 
-  const updateCart=(sku,field,val)=>{
-    setCart(c=>c.map(x=>{if(x.sku!==sku)return x;const updated={...x,[field]:field==='qty'?Math.max(1,parseInt(val)||1):field==='sell'?parseFloat(val)||0:parseFloat(val)||0};return updated;}));
+  const updateCart = (sku,field,val) => {
+    setCart(c=>c.map(x=>{
+      if(x.sku!==sku) return x;
+      if(field==='qty')     return {...x,qty:Math.max(1,parseInt(val)||1)};
+      if(field==='sell')    return {...x,sell:parseFloat(val)||0};
+      if(field==='vatMode') return {...x,vatMode:val};
+      return x;
+    }));
   };
 
-  // Calculate totals
-  const subtotal=cart.reduce((s,x)=>s+x.sell*x.qty,0);
-  const discAmt=globalDisc?parseFloat(globalDisc)||0:0;
-  const afterDisc=Math.max(0,subtotal-discAmt);
-  const vatAmt=vat?afterDisc*VAT_RATE:0;
-  const grandTotal=afterDisc+vatAmt;
-  const totalCost=cart.reduce((s,x)=>s+(x.cost||0)*x.qty,0);
-  const profit=afterDisc-totalCost;
+  // Per-item VAT calculation
+  // included: ราคา = รวม VAT แล้ว → VAT = price * 7/107
+  // add:      VAT = price * 7%  → total = price * 1.07
+  // none:     ไม่มี VAT
+  const calcItem = x => {
+    const base = x.sell * x.qty;
+    if(x.vatMode==='included'){
+      const vatAmt = base * VAT_RATE / (1 + VAT_RATE);
+      return { base, vatAmt, total: base };
+    }
+    if(x.vatMode==='add'){
+      const vatAmt = base * VAT_RATE;
+      return { base, vatAmt, total: base + vatAmt };
+    }
+    return { base, vatAmt:0, total: base };
+  };
 
-  const confirmSale=async()=>{
-    if(!cart.length)return;
-    setSaving(true);setMsg('');
-    const items=cart.map(x=>({sku:x.sku,name:x.name,cat:x.cat,qty:x.qty,unit_price:x.unitPrice,sell:x.sell,discount_per_item:x.discount||0,cost:x.cost,subtotal:x.sell*x.qty}));
-    const saleData={items,total:subtotal,discount_amount:discAmt,total_after_discount:afterDisc,vat_amount:vatAmt,total_after_vat:grandTotal,note,channel,customer_id:customer?.customer_id||null,customer_name:customer?.name||null};
-    const {error:sErr}=await supabase.from('sales').insert([saleData]);
-    if(sErr){setMsg('❌ '+sErr.message);setSaving(false);return;}
-    const ns={...stock};const ups=[];
-    for(const it of items){const cur=ns[it.sku]?.qty||0;ns[it.sku]={...(ns[it.sku]||{}),qty:Math.max(0,cur-it.qty)};ups.push({sku:it.sku,qty:ns[it.sku].qty,safety:ns[it.sku]?.safety||10,cost:ns[it.sku]?.cost||0});}
+  // Totals
+  const totals = useMemo(()=>{
+    let subtotalNoVat=0, vatSum=0, grandTotal=0;
+    cart.forEach(x=>{
+      const c = calcItem(x);
+      if(x.vatMode==='included'){
+        subtotalNoVat += c.base - c.vatAmt;
+      } else {
+        subtotalNoVat += c.base;
+      }
+      vatSum    += c.vatAmt;
+      grandTotal += c.total;
+    });
+    const discAmt  = parseFloat(globalDisc)||0;
+    const afterDisc = Math.max(0, grandTotal - discAmt);
+    const totalCost = cart.reduce((s,x)=>s+(x.cost||0)*x.qty, 0);
+    return { subtotalNoVat, vatSum, grandTotal, discAmt, afterDisc, totalCost, profit: afterDisc-totalCost };
+  },[cart,globalDisc]);
+
+  const confirmSale = async () => {
+    if(!cart.length) return;
+    setSaving(true); setMsg('');
+    const items = cart.map(x=>{
+      const c = calcItem(x);
+      return {sku:x.sku,name:x.name,cat:x.cat,qty:x.qty,unit_price:x.unitPrice,sell:x.sell,cost:x.cost,vat_mode:x.vatMode,vat_amount:c.vatAmt,subtotal:c.total};
+    });
+    const saleData = {
+      items,
+      total:           totals.grandTotal,
+      discount_amount: totals.discAmt,
+      total_after_discount: totals.afterDisc,
+      vat_amount:      totals.vatSum,
+      total_after_vat: totals.afterDisc,
+      note, channel,
+      customer_id:   customer?.customer_id||null,
+      customer_name: customer?.name||null,
+    };
+    const {error:sErr} = await supabase.from('sales').insert([saleData]);
+    if(sErr){setMsg('❌ '+sErr.message); setSaving(false); return;}
+    // Deduct stock
+    const ns={...stock}; const ups=[];
+    for(const it of items){
+      const cur = ns[it.sku]?.qty||0;
+      ns[it.sku] = {...(ns[it.sku]||{}), qty:Math.max(0,cur-it.qty)};
+      ups.push({sku:it.sku,qty:ns[it.sku].qty,safety:ns[it.sku]?.safety||10,cost:ns[it.sku]?.cost||0});
+    }
     await supabase.from('stock').upsert(ups,{onConflict:'sku'});
-    setStock(ns);setSales(s=>[...s,saleData]);
-    setCart([]);setNote('');setCustomer(null);setGlobalDisc('');
-    setMsg('✅ บันทึกการขาย ฿'+fmt(grandTotal)+(vat?' (รวม VAT)':'')+' — ตัดสต็อกแล้ว');
+    setStock(ns); setSales(s=>[...s,saleData]);
+    setCart([]); setNote(''); setCustomer(null); setGlobalDisc('');
+    setMsg('✅ บันทึกการขาย ฿'+fmt(totals.afterDisc)+' (VAT ฿'+fmt(totals.vatSum)+') — ตัดสต็อกแล้ว');
     setSaving(false);
   };
 
   // Import sale file
-  const importSaleFile=async file=>{
-    if(!xlsxOk||!file)return;
-    setImporting(true);setImportMsg('');
+  const importSaleFile = async file => {
+    if(!xlsxOk||!file) return;
+    setImporting(true); setImportMsg('');
     try{
-      const buf=await file.arrayBuffer();
-      const wb=window.XLSX.read(buf,{type:'array'});
-      const ws=wb.Sheets[wb.SheetNames[0]];
-      const rows=window.XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
-      const header=rows[0].map(h=>String(h||'')).toLowerCase?rows[0].map(h=>String(h||'').toLowerCase()):[];
-      const skuCol=header.findIndex(h=>h.includes('sku'));
-      const qtyCol=header.findIndex(h=>h.includes('จำนวน')||h.includes('qty'));
-      const priceCol=header.findIndex(h=>h.includes('ราคา')||h.includes('price'));
-      if(skuCol<0||qtyCol<0){setImportMsg('❌ ไม่พบคอลัมน์ SKU หรือจำนวน');setImporting(false);return;}
+      const buf = await file.arrayBuffer();
+      const wb  = window.XLSX.read(buf,{type:'array'});
+      const ws  = wb.Sheets[wb.SheetNames[0]];
+      const rows= window.XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      const header = rows[0].map(h=>String(h||'').toLowerCase());
+      const skuCol  = header.findIndex(h=>h.includes('sku'));
+      const qtyCol  = header.findIndex(h=>h.includes('จำนวน')||h.includes('qty'));
+      const priceCol= header.findIndex(h=>h.includes('ราคา')||h.includes('price'));
+      const vatCol  = header.findIndex(h=>h.includes('vat')||h.includes('แวท'));
+      if(skuCol<0||qtyCol<0){setImportMsg('❌ ไม่พบคอลัมน์ SKU หรือจำนวน'); setImporting(false); return;}
       const newItems=[];
       for(let i=1;i<rows.length;i++){
-        const row=rows[i];const sku=String(row[skuCol]||'').trim();
-        if(!sku||!PRMAP[sku])continue;
-        const qty=parseInt(row[qtyCol]);if(isNaN(qty)||qty<=0)continue;
-        const p=PRMAP[sku];
-        const sell=priceCol>=0&&row[priceCol]!==''?parseFloat(row[priceCol])||p.sell:p.sell;
-        newItems.push({sku,name:p.name,cat:p.cat,unitPrice:p.sell,sell,cost:stock[sku]?.cost||p.cost,qty,discount:0});
+        const row = rows[i];
+        const sku = String(row[skuCol]||'').trim();
+        if(!sku||!PRMAP[sku]) continue;
+        const qty = parseInt(row[qtyCol]); if(isNaN(qty)||qty<=0) continue;
+        const p   = PRMAP[sku];
+        const sell= priceCol>=0&&row[priceCol]!==''?parseFloat(row[priceCol])||p.sell:p.sell;
+        // VAT mode from file: 'included'/'add'/'none' or blank=none
+        let vatMode = 'none';
+        if(vatCol>=0){
+          const v = String(row[vatCol]||'').toLowerCase();
+          if(v.includes('incl')||v.includes('รวม')) vatMode='included';
+          else if(v.includes('add')||v.includes('บวก')) vatMode='add';
+        }
+        newItems.push({sku,name:p.name,cat:p.cat,unitPrice:p.sell,sell,cost:stock[sku]?.cost||p.cost,qty,vatMode});
       }
-      if(!newItems.length){setImportMsg('❌ ไม่พบข้อมูลที่ valid');setImporting(false);return;}
-      setCart(newItems);setImportMsg('✅ โหลด '+newItems.length+' รายการ — ตรวจสอบแล้วกด ยืนยันการขาย');
+      if(!newItems.length){setImportMsg('❌ ไม่พบข้อมูลที่ valid'); setImporting(false); return;}
+      setCart(newItems);
+      setImportMsg('✅ โหลด '+newItems.length+' รายการเข้าตะกร้า — ตรวจสอบแล้วกด ยืนยันการขาย');
     }catch(e){setImportMsg('❌ '+e.message);}
     setImporting(false);
   };
 
-  // Export sale template
-  const exportSaleTemplate=()=>{
-    if(!xlsxOk)return;
-    exportXLSX('sale_template.xlsx',[{name:'บันทึกขาย',headers:['SKU','ชื่อสินค้า','หมวด','ราคาขาย','จำนวน','ราคาที่ขายจริง (ถ้าต่างจากราคาปกติ)'],data:PR.slice(0,20).map(p=>[p[0],p[1],p[2],p[3],'',''])}]);
+  const exportSaleTemplate = () => {
+    if(!xlsxOk) return;
+    exportXLSX('sale_template.xlsx',[{
+      name:'บันทึกขาย',
+      headers:['SKU','ชื่อสินค้า','หมวด','ราคาขาย','จำนวน','ราคาที่ขายจริง (ว่าง=ใช้ราคาปกติ)','VAT (none/included/add)'],
+      data: PR.slice(0,20).map(p=>[p[0],p[1],p[2],p[3],'','','none'])
+    }]);
   };
+
+  // VAT badge colors
+  const vatBadgeStyle = mode => ({
+    display:'inline-block', borderRadius:4, padding:'2px 7px', fontSize:10, fontWeight:600, cursor:'pointer',
+    background: mode==='included'?T.blueLight : mode==='add'?T.amberLight : T.grayLight,
+    color:       mode==='included'?T.blue      : mode==='add'?T.amber      : T.gray,
+    border:`1px solid ${mode==='included'?T.blue:mode==='add'?T.amber:T.borderDark}`,
+  });
 
   return (
     <div>
-      {/* Import sale file */}
+      {/* Import / Template */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
         <div style={S.card}>
           <div style={S.cardTitle}>📥 นำเข้าไฟล์ขาย (ลากวาง)</div>
-          <DropZone onFile={importSaleFile} accept=".xlsx,.xls,.csv" label="ลากไฟล์ Excel รายการขายมาวาง" sublabel="ระบบจะโหลดรายการเข้าตะกร้าอัตโนมัติ"/>
+          <DropZone onFile={importSaleFile} accept=".xlsx,.xls,.csv" label="ลากไฟล์ Excel รายการขายมาวาง" sublabel="ระบบโหลดเข้าตะกร้าอัตโนมัติ"/>
           {importing&&<div style={{marginTop:8,fontSize:12,color:T.textMuted}}>⏳ กำลังโหลด...</div>}
           {importMsg&&<div style={{marginTop:8,padding:'8px 12px',borderRadius:T.radius,fontSize:12,background:importMsg.startsWith('✅')?T.greenLight:T.redLight,color:importMsg.startsWith('✅')?T.green:T.red,fontWeight:500}}>{importMsg}</div>}
         </div>
         <div style={S.card}>
           <div style={S.cardTitle}>📋 Template ไฟล์ขาย</div>
-          <button style={{...btn('dk'),width:'100%',textAlign:'left'}} onClick={exportSaleTemplate} disabled={!xlsxOk}>📥 ดาวน์โหลด Template ไฟล์ขาย</button>
-          <div style={{marginTop:8,fontSize:11,color:T.textMuted,lineHeight:1.6}}>กรอก SKU + จำนวน → save → ลากมาวาง → ระบบโหลดเข้าตะกร้าให้อัตโนมัติ</div>
+          <button style={{...btn('dk'),width:'100%',textAlign:'left',marginBottom:8}} onClick={exportSaleTemplate} disabled={!xlsxOk}>📥 ดาวน์โหลด Template</button>
+          <div style={{fontSize:11,color:T.textMuted,lineHeight:1.7}}>
+            คอลัมน์ VAT ใส่ได้ 3 แบบ:<br/>
+            <b>none</b> = ไม่มีแวท &nbsp;|&nbsp;
+            <b>included</b> = รวมแวทแล้ว &nbsp;|&nbsp;
+            <b>add</b> = บวกแวทเพิ่ม
+          </div>
         </div>
       </div>
 
@@ -543,7 +634,7 @@ function SalesPage({stock,setStock,setSales}){
             {sugs.length>0&&(
               <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:8}}>
                 {sugs.map(p=>(
-                  <button key={p[0]} style={{padding:'6px 12px',border:`1px solid ${T.border}`,borderRadius:T.radius,background:T.grayLight,cursor:'pointer',fontSize:12,textAlign:'left',transition:'background 0.1s'}} onClick={()=>addToCart(p)}>
+                  <button key={p[0]} style={{padding:'6px 12px',border:`1px solid ${T.border}`,borderRadius:T.radius,background:T.grayLight,cursor:'pointer',fontSize:12,textAlign:'left'}} onClick={()=>addToCart(p)}>
                     <span style={{fontWeight:600,color:T.dark}}>{p[1]}</span>
                     <span style={{color:T.green,marginLeft:6,fontSize:11}}>({stock[p[0]]?.qty||0})</span>
                     <span style={{color:T.textMuted,marginLeft:4}}>฿{fmt(p[3])}</span>
@@ -559,23 +650,52 @@ function SalesPage({stock,setStock,setSales}){
               <div style={S.cardTitle}>🛒 รายการในบิล</div>
               <div style={S.tow}>
                 <table style={S.tbl}>
-                  <thead><tr>{['ชื่อสินค้า','ราคา/หน่วย','จำนวน','รวม',''].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead>
+                  <thead><tr>
+                    {['ชื่อสินค้า','ราคา/หน่วย','VAT','จำนวน','ยอด',''].map((h,i)=><th key={i} style={S.th}>{h}</th>)}
+                  </tr></thead>
                   <tbody>
-                    {cart.map((x,i)=>(
-                      <tr key={x.sku}>
-                        <td style={tdr(i)}>
-                          <div style={{fontWeight:500}}>{x.name}</div>
-                          <div style={{fontSize:10,color:T.textMuted}}>{x.sku} · {x.cat}</div>
-                        </td>
-                        <td style={tdr(i)}>
-                          <input type="number" min="0" step="0.01" style={{...S.inp,width:90,padding:'4px 6px',borderColor:x.sell!==x.unitPrice?T.amber:T.borderDark,fontWeight:x.sell!==x.unitPrice?600:400}} value={x.sell} onChange={e=>updateCart(x.sku,'sell',e.target.value)}/>
-                          {x.sell!==x.unitPrice&&<div style={{fontSize:10,color:T.amber}}>ปกติ ฿{fmt(x.unitPrice)}</div>}
-                        </td>
-                        <td style={tdr(i)}><input type="number" min="1" style={{...S.inp,width:65,padding:'4px 6px',textAlign:'center'}} value={x.qty} onChange={e=>updateCart(x.sku,'qty',e.target.value)}/></td>
-                        <td style={{...tdr(i),fontWeight:500}}>฿{fmt(x.sell*x.qty)}</td>
-                        <td style={tdr(i)}><button style={{background:'none',border:'none',color:T.red,cursor:'pointer',fontSize:18,lineHeight:1}} onClick={()=>setCart(c=>c.filter(it=>it.sku!==x.sku))}>×</button></td>
-                      </tr>
-                    ))}
+                    {cart.map((x,i)=>{
+                      const c = calcItem(x);
+                      return (
+                        <tr key={x.sku}>
+                          <td style={tdr(i)}>
+                            <div style={{fontWeight:500}}>{x.name}</div>
+                            <div style={{fontSize:10,color:T.textMuted}}>{x.sku} · {x.cat}</div>
+                            {x.vatMode!=='none'&&<div style={{fontSize:10,color:x.vatMode==='included'?T.blue:T.amber}}>
+                              {x.vatMode==='included'?`VAT รวมแล้ว ฿${fmtD(c.vatAmt/x.qty)}/ชิ้น`:`VAT บวกเพิ่ม ฿${fmtD(c.vatAmt/x.qty)}/ชิ้น`}
+                            </div>}
+                          </td>
+                          <td style={tdr(i)}>
+                            <input type="number" min="0" step="0.01"
+                              style={{...S.inp,width:85,padding:'4px 6px',borderColor:x.sell!==x.unitPrice?T.amber:T.borderDark,fontWeight:x.sell!==x.unitPrice?600:400}}
+                              value={x.sell} onChange={e=>updateCart(x.sku,'sell',e.target.value)}/>
+                            {x.sell!==x.unitPrice&&<div style={{fontSize:10,color:T.amber}}>ปกติ ฿{fmt(x.unitPrice)}</div>}
+                          </td>
+                          <td style={tdr(i)}>
+                            {/* VAT mode selector — 3 buttons */}
+                            <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                              {Object.entries(VAT_LABELS).map(([mode,label])=>(
+                                <label key={mode} style={{display:'flex',alignItems:'center',gap:4,cursor:'pointer'}}>
+                                  <input type="radio" name={`vat_${x.sku}`} value={mode} checked={x.vatMode===mode} onChange={()=>updateCart(x.sku,'vatMode',mode)} style={{cursor:'pointer'}}/>
+                                  <span style={vatBadgeStyle(mode)}>{mode==='included'?'รวม VAT':mode==='add'?'+VAT 7%':'ไม่มี VAT'}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </td>
+                          <td style={tdr(i)}>
+                            <input type="number" min="1" style={{...S.inp,width:60,padding:'4px 6px',textAlign:'center'}}
+                              value={x.qty} onChange={e=>updateCart(x.sku,'qty',e.target.value)}/>
+                          </td>
+                          <td style={{...tdr(i),fontWeight:500}}>
+                            <div>฿{fmt(c.total)}</div>
+                            {x.vatMode!=='none'&&<div style={{fontSize:10,color:T.textMuted}}>VAT ฿{fmt(c.vatAmt)}</div>}
+                          </td>
+                          <td style={tdr(i)}>
+                            <button style={{background:'none',border:'none',color:T.red,cursor:'pointer',fontSize:18,lineHeight:1}} onClick={()=>setCart(c=>c.filter(it=>it.sku!==x.sku))}>×</button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -587,32 +707,35 @@ function SalesPage({stock,setStock,setSales}){
         <div>
           <div style={S.card}>
             <div style={S.cardTitle}>💰 สรุปบิล</div>
-
-            {/* VAT toggle */}
-            <div style={{...S.row,marginBottom:12,padding:'10px 12px',background:T.grayLight,borderRadius:T.radius}}>
-              <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',flex:1}}>
-                <input type="checkbox" checked={vat} onChange={e=>setVat(e.target.checked)} style={{width:16,height:16}}/>
-                <span style={{fontWeight:500}}>คิด VAT 7%</span>
-              </label>
-            </div>
-
-            {/* Totals */}
+            {/* Totals breakdown */}
             <div style={{background:T.grayLight,borderRadius:T.radius,padding:'12px 14px',marginBottom:12}}>
               {[
-                ['ราคารวม','฿'+fmt(subtotal)],
-                ...(discAmt>0?[['ส่วนลด','-฿'+fmt(discAmt)]]:[] ),
-                ...(vat?[['ก่อนภาษี','฿'+fmt(afterDisc)],['VAT 7%','฿'+fmt(vatAmt)]]:[] ),
-              ].map(([l,v],i)=>(
-                <div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:13,padding:'3px 0',color:l==='ส่วนลด'?T.red:T.text}}><span>{l}</span><span>{v}</span></div>
+                ['ราคารวม (ก่อนแวท)',        '฿'+fmt(totals.subtotalNoVat)],
+                ['VAT รวม',                   '฿'+fmt(totals.vatSum), totals.vatSum>0?T.amber:T.textMuted],
+                ...(totals.discAmt>0?[['ส่วนลด', '-฿'+fmt(totals.discAmt), T.red]]:[]),
+              ].map(([l,v,c],i)=>(
+                <div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:13,padding:'3px 0',color:c||T.text}}>
+                  <span>{l}</span><span>{v}</span>
+                </div>
               ))}
               <div style={{display:'flex',justifyContent:'space-between',fontWeight:700,fontSize:20,marginTop:8,paddingTop:8,borderTop:`2px solid ${T.border}`,color:T.dark}}>
-                <span>ยอดรวม</span><span>฿{fmt(grandTotal)}</span>
+                <span>ยอดรวม</span><span>฿{fmt(totals.afterDisc)}</span>
               </div>
-              <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>กำไรโดยประมาณ ฿{fmt(profit)} ({subtotal>0?fmtP(profit/subtotal*100):'0%'})</div>
+              <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>
+                กำไรโดยประมาณ ฿{fmt(totals.profit)} ({totals.afterDisc>0?fmtP(totals.profit/totals.afterDisc*100):'0%'})
+              </div>
+            </div>
+
+            {/* Legend VAT modes */}
+            <div style={{marginBottom:10,padding:'8px 10px',background:T.blueLight,borderRadius:T.radius,fontSize:11,color:T.blue,lineHeight:1.8}}>
+              <b>VAT ต่อรายการ:</b><br/>
+              <span style={vatBadgeStyle('none')}>ไม่มี VAT</span> ไม่คิดแวท &nbsp;
+              <span style={vatBadgeStyle('included')}>รวม VAT</span> ราคารวมแวทแล้ว แสดงแยก &nbsp;
+              <span style={vatBadgeStyle('add')}>+VAT 7%</span> บวกแวทเพิ่ม
             </div>
 
             {/* Discount */}
-            <div style={{fontSize:12,color:T.textMuted,marginBottom:4}}>ส่วนลด (฿)</div>
+            <div style={{fontSize:12,color:T.textMuted,marginBottom:4}}>ส่วนลดรวมบิล (฿)</div>
             <input type="number" min="0" style={{...S.inp,width:'100%',marginBottom:10}} placeholder="0" value={globalDisc} onChange={e=>setGlobalDisc(e.target.value)}/>
 
             {/* Customer */}
@@ -630,7 +753,7 @@ function SalesPage({stock,setStock,setSales}){
             <input style={{...S.inp,width:'100%',marginBottom:14}} placeholder="หมายเหตุเพิ่มเติม..." value={note} onChange={e=>setNote(e.target.value)}/>
 
             <button style={{...btn('gr'),width:'100%',padding:'13px 0',fontSize:15,borderRadius:T.radius}} onClick={confirmSale} disabled={!cart.length||saving}>
-              {saving?'กำลังบันทึก...':`✅ ยืนยันการขาย ${vat?'(รวม VAT)':''}`}
+              {saving?'กำลังบันทึก...':'✅ ยืนยันการขาย'}
             </button>
             {msg&&<div style={{marginTop:10,padding:'9px 12px',borderRadius:T.radius,fontSize:12,background:msg.startsWith('✅')?T.greenLight:T.redLight,color:msg.startsWith('✅')?T.green:T.red,fontWeight:500}}>{msg}</div>}
           </div>
@@ -643,7 +766,7 @@ function SalesPage({stock,setStock,setSales}){
 // ════════════════════════════════════════════════════════
 // REPORT PAGE
 // ════════════════════════════════════════════════════════
-function ReportPage({sales}){
+function ReportPage({stock,sales}){
   const now = new Date();
   const thisYear  = now.getFullYear();
   const thisMonth = now.getMonth();
@@ -759,8 +882,39 @@ function ReportPage({sales}){
     ]);
   };
 
+  // Dashboard KPIs (same filtered data)
+  const stVal   = PR.reduce((s,p)=>{const d=stock[p[0]]||{qty:0,cost:p[4]};return s+d.qty*d.cost;},0);
+  const outN    = PR.filter(p=>(stock[p[0]]?.qty||0)===0).length;
+  const lowN    = PR.filter(p=>{const d=stock[p[0]]||{qty:0,safety:10};return d.qty>0&&d.qty<=d.safety;}).length;
+  const catStock= useMemo(()=>{
+    const map={};
+    PR.forEach(p=>{const d=stock[p[0]]||{qty:0,cost:p[4]};if(!map[p[2]])map[p[2]]={cat:p[2],val:0,out:0,low:0};map[p[2]].val+=d.qty*d.cost;const t=statType(d.qty,d.safety||10);if(t==='out')map[p[2]].out++;else if(t==='low')map[p[2]].low++;});
+    return Object.values(map).sort((a,b)=>b.val-a.val);
+  },[stock]);
+  const daily7=useMemo(()=>{const days=[];for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);const ds=d.toDateString();const dayS=sales.filter(s=>new Date(s.date).toDateString()===ds);days.push({label:d.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit'}),rev:dayS.reduce((s,t)=>s+(t.total_after_vat||t.total||0),0)});}return days;},[sales]);
+
   return(
     <div>
+      {/* Dashboard KPIs */}
+      <div style={S.kgrid}>
+        <KPI label="สินค้าทั้งหมด"   value={PR.length+' SKU'} icon="📦" bg={T.blueLight}  color={T.blue}/>
+        <KPI label="มูลค่าสต็อก"     value={'฿'+fmt(stVal)}   icon="💰" bg={T.greenLight} color={T.green}/>
+        <KPI label="ยอดขาย (ช่วงนี้)" value={'฿'+fmt(revenue)} icon="💳" bg={T.goldLight}  color={T.gold}/>
+        <KPI label="กำไร (ช่วงนี้)"   value={'฿'+fmt(profit)}  icon="📈" bg={profit>=0?T.greenLight:T.redLight} color={profit>=0?T.green:T.red}/>
+        <KPI label="หมดสต็อก"        value={outN+' รายการ'}  icon="❌" bg={T.redLight}   color={T.red}/>
+        <KPI label="ใกล้หมด"         value={lowN+' รายการ'}  icon="⚠️" bg={T.amberLight} color={T.amber}/>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+        <div style={S.card}><div style={S.cardTitle}>📊 ยอดขาย 7 วันล่าสุด</div><BarChart data={daily7} vk="rev" lk="label" color={T.dark} h={130}/></div>
+        <div style={S.card}><div style={S.cardTitle}>📦 สต็อกแยกหมวด</div>
+          <div style={S.tow}><table style={S.tbl}>
+            <thead><tr>{['หมวด','มูลค่า','หมด','ใกล้หมด'].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead>
+            <tbody>{catStock.slice(0,8).map((c,i)=><tr key={c.cat}><td style={tdr(i)}>{c.cat}</td><td style={tdr(i)}>฿{fmt(c.val)}</td><td style={{...tdr(i),color:c.out>0?T.red:T.textMuted}}>{c.out||'—'}</td><td style={{...tdr(i),color:c.low>0?T.amber:T.textMuted}}>{c.low||'—'}</td></tr>)}
+            </tbody>
+          </table></div>
+        </div>
+      </div>
+
       {/* Period selector */}
       <div style={S.card}>
         <div style={S.cardTitle}>📅 เลือกช่วงเวลา</div>
@@ -939,6 +1093,8 @@ function ProductPage({products, setProducts, stock, setStock}){
   const [saving,setSaving]     = useState(false);
   const [msg,setMsg]           = useState('');
   const [delConfirm,setDelConfirm] = useState(null);
+  const [importMsg,setImportMsg]   = useState('');
+  const [importing,setImporting]   = useState(false);
   const xlsxOk = useXLSX();
 
   // Form state
@@ -1023,6 +1179,62 @@ function ProductPage({products, setProducts, stock, setStock}){
     setMsg('✅ ลบสินค้า '+sku+' เรียบร้อย');
   };
 
+  // Import product file (เพิ่ม/อัพเดทสินค้าจาก Excel)
+  const importProductFile = async file => {
+    if(!xlsxOk||!file) return;
+    setImporting(true); setImportMsg('');
+    try{
+      const buf  = await file.arrayBuffer();
+      const wb   = window.XLSX.read(buf,{type:'array'});
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const rows = window.XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      const header = rows[0].map(h=>String(h||'').toLowerCase());
+      const skuCol  = header.findIndex(h=>h.includes('sku'));
+      const nameCol = header.findIndex(h=>h.includes('ชื่อ')||h.includes('name'));
+      const catCol  = header.findIndex(h=>h.includes('หมวด')||h.includes('cat'));
+      const sellCol = header.findIndex(h=>h.includes('ราคาขาย')||h.includes('sell'));
+      const costCol = header.findIndex(h=>h.includes('ราคาทุน')||h.includes('cost'));
+      if(skuCol<0){setImportMsg('❌ ไม่พบคอลัมน์ SKU'); setImporting(false); return;}
+      const toUpsert=[]; const skipped=[];
+      for(let i=1;i<rows.length;i++){
+        const row  = rows[i];
+        const sku  = String(row[skuCol]||'').trim(); if(!sku) continue;
+        const name = nameCol>=0&&row[nameCol]!==''?String(row[nameCol]).trim():'';
+        const cat  = catCol>=0&&row[catCol]!==''?String(row[catCol]).trim():'';
+        const sell = sellCol>=0&&row[sellCol]!==''?parseFloat(row[sellCol]):null;
+        const cost = costCol>=0&&row[costCol]!==''?parseFloat(row[costCol]):null;
+        // Must have at least name or be existing product
+        const existing = products.find(p=>p[0]===sku);
+        if(!existing&&!name){skipped.push(sku); continue;}
+        toUpsert.push({
+          sku,
+          name: name||(existing?existing[1]:''),
+          cat:  cat ||(existing?existing[2]:''),
+          sell: sell!=null?sell:(existing?existing[3]:0),
+          cost: cost!=null?cost:(existing?existing[4]:0),
+        });
+      }
+      if(!toUpsert.length){setImportMsg('❌ ไม่พบข้อมูลที่ valid'); setImporting(false); return;}
+      const {error} = await supabase.from('products').upsert(toUpsert,{onConflict:'sku'});
+      if(error){setImportMsg('❌ '+error.message); setImporting(false); return;}
+      // Update local state
+      const prodMap={};
+      products.forEach(p=>{ prodMap[p[0]]=p; });
+      toUpsert.forEach(u=>{ prodMap[u.sku]=[u.sku,u.name,u.cat,u.sell,u.cost]; });
+      const newProds = Object.values(prodMap).sort((a,b)=>a[2].localeCompare(b[2])||a[1].localeCompare(b[1]));
+      buildProductIndex(newProds);
+      setProducts(newProds);
+      const addedN = toUpsert.filter(u=>!products.find(p=>p[0]===u.sku)).length;
+      const updN   = toUpsert.length - addedN;
+      let resultMsg = '✅ ';
+      if(addedN>0) resultMsg += 'เพิ่มใหม่ '+addedN+' รายการ ';
+      if(updN>0)   resultMsg += 'อัพเดท '+updN+' รายการ ';
+      if(skipped.length>0) resultMsg += '(ข้าม '+skipped.length+' รายการที่ข้อมูลไม่ครบ)';
+      setImportMsg(resultMsg);
+    }catch(e){setImportMsg('❌ '+e.message);}
+    setImporting(false);
+  };
+
   // Export product list
   const exportProducts = () => {
     if(!xlsxOk) return;
@@ -1059,6 +1271,26 @@ function ProductPage({products, setProducts, stock, setStock}){
 
   return (
     <div>
+      {/* Import from Excel */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+        <div style={S.card}>
+          <div style={S.cardTitle}>📥 นำเข้าสินค้าจาก Excel (ลากวาง)</div>
+          <DropZone onFile={importProductFile} accept=".xlsx,.xls,.csv" label="ลากไฟล์ Excel สินค้ามาวาง" sublabel="เพิ่มสินค้าใหม่ หรืออัพเดทข้อมูลที่มีอยู่ได้เลย"/>
+          {importing&&<div style={{marginTop:8,fontSize:12,color:T.textMuted}}>⏳ กำลังประมวลผล...</div>}
+          {importMsg&&<div style={{marginTop:8,padding:'8px 12px',borderRadius:T.radius,fontSize:12,background:importMsg.startsWith('✅')?T.greenLight:T.redLight,color:importMsg.startsWith('✅')?T.green:T.red,fontWeight:500}}>{importMsg}</div>}
+        </div>
+        <div style={S.card}>
+          <div style={S.cardTitle}>📤 ดาวน์โหลด</div>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            <button style={{...btn('gr'),textAlign:'left'}} onClick={exportProducts} disabled={!xlsxOk}>📊 Export รายการสินค้าทั้งหมด</button>
+            <div style={{fontSize:11,color:T.textMuted,lineHeight:1.7}}>
+              ไฟล์ที่ Export สามารถแก้ไขแล้ว<b>ลากกลับมาวาง</b>เพื่ออัพเดทได้เลย<br/>
+              คอลัมน์ที่รองรับ: <b>SKU, ชื่อสินค้า, หมวด, ราคาขาย, ราคาทุน</b>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Toolbar */}
       <div style={S.card}>
         <div style={{...S.row,gap:8,flexWrap:'wrap'}}>
@@ -1068,7 +1300,6 @@ function ProductPage({products, setProducts, stock, setStock}){
           </select>
           <span style={{fontSize:12,color:T.textMuted}}>{filtered.length} รายการ</span>
           <div style={{flex:1}}/>
-          <button style={btn('gr',{fontSize:12})} onClick={exportProducts} disabled={!xlsxOk}>📥 Export</button>
           <button style={btn('dk')} onClick={openAdd}>➕ เพิ่มสินค้าใหม่</button>
         </div>
         {msg&&<div style={{marginTop:10,padding:'8px 12px',borderRadius:T.radius,fontSize:12,background:msg.startsWith('✅')?T.greenLight:T.redLight,color:msg.startsWith('✅')?T.green:T.red,fontWeight:500}}>{msg}</div>}
@@ -1192,7 +1423,7 @@ export default function App(){
     })();
   },[]);
 
-  const tabs=[['dash','📊','Dashboard'],['stock','📦','สต็อก'],['products','🏷️','สินค้า'],['sales','💰','บันทึกขาย'],['report','📈','รายงาน'],['plan','🏭','แผนผลิต']];
+  const tabs=[['report','📊','Dashboard & รายงาน'],['stock','📦','สต็อก'],['products','🏷️','สินค้า'],['sales','💰','บันทึกขาย'],['plan','🏭','แผนผลิต']];
 
   if(loading)return<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:12,color:T.textMuted,fontFamily:"Arial,sans-serif"}}><div style={{fontSize:40}}>☕</div><div>กำลังโหลดระบบ...</div></div>;
   if(error)return<div style={{padding:40,color:T.red,fontFamily:"Arial,sans-serif"}}>❌ {error}</div>;
@@ -1220,9 +1451,11 @@ export default function App(){
         {tab==='dash'     &&<Dashboard stock={stock} sales={sales}/>}
         {tab==='stock'    &&<StockPage stock={stock} setStock={setStock}/>}
         {tab==='products' &&<ProductPage products={products} setProducts={setProducts} stock={stock} setStock={setStock}/>}
-        {tab==='sales'    &&<SalesPage stock={stock} setStock={setStock} setSales={setSales}/>}
-        {tab==='report'   &&<ReportPage sales={sales}/>}
-        {tab==='plan'     &&<PlanPage stock={stock} sales={sales}/>}
+        {tab==='report'  &&<ReportPage stock={stock} sales={sales}/>}
+        {tab==='stock'   &&<StockPage  stock={stock} setStock={setStock}/>}
+        {tab==='products'&&<ProductPage products={products} setProducts={setProducts} stock={stock} setStock={setStock}/>}
+        {tab==='sales'   &&<SalesPage  stock={stock} setStock={setStock} setSales={setSales}/>}
+        {tab==='plan'    &&<PlanPage   stock={stock} sales={sales}/>}
       </div>
     </div>
   );
