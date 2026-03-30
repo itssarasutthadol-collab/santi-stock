@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from './supabase';
 
-// Products loaded from Supabase (see useProducts hook below)
+// ── Product index (loaded from Supabase) ─────────────────
 let PR = [];
 let PRMAP = {};
 let CATS = ['ทั้งหมด'];
@@ -16,6 +16,8 @@ function buildProductIndex(products) {
 }
 
 const VAT_RATE = 0.07;
+
+
 
 const fmt   = n => Math.round(n).toLocaleString('th-TH');
 const fmtD  = n => Number(n).toFixed(2);
@@ -263,7 +265,7 @@ function Dashboard({stock,sales}){
 // ════════════════════════════════════════════════════════
 // STOCK PAGE
 // ════════════════════════════════════════════════════════
-function StockPage({stock,setStock}){
+function StockPage({stock,setStock,profile}){
   const [kw,setKw]=useState('');const [cat,setCat]=useState('ทั้งหมด');const [stF,setStF]=useState('ทั้งหมด');
   const [edits,setEdits]=useState({});const [saving,setSaving]=useState(false);const [msg,setMsg]=useState('');
   const [importMsg,setImportMsg]=useState('');const [importing,setImporting]=useState(false);
@@ -428,13 +430,14 @@ function StockPage({stock,setStock}){
 // ════════════════════════════════════════════════════════
 // SALES PAGE — ราคาแก้ได้ + ส่วนลด + VAT
 // ════════════════════════════════════════════════════════
-function SalesPage({stock,setStock,setSales}){
+function SalesPage({stock,setStock,setSales,staff=[],profile}){
   const [kw,setKw]           = useState('');
   const [cart,setCart]       = useState([]);
   const [customer,setCustomer] = useState(null);
   const [note,setNote]       = useState('');
   const [channel,setChannel] = useState('In-store');
   const [globalDisc,setGlobalDisc] = useState('');
+  const [selectedStaff,setSelectedStaff] = useState('');
   const [saving,setSaving]   = useState(false);
   const [msg,setMsg]         = useState('');
   const [importMsg,setImportMsg] = useState('');
@@ -520,6 +523,14 @@ function SalesPage({stock,setStock,setSales}){
       const c = calcItem(x);
       return {sku:x.sku,name:x.name,cat:x.cat,qty:x.qty,unit_price:x.unitPrice,sell:x.sell,cost:x.cost,vat_mode:x.vatMode,vat_amount:c.vatAmt,subtotal:c.total};
     });
+    // Calculate commission
+    const staffObj = staff.find(s=>s.id===selectedStaff);
+    let commAmt = 0;
+    if(staffObj){
+      if(staffObj.commission_type==='percent_revenue') commAmt = totals.afterDisc * staffObj.commission_rate/100;
+      else if(staffObj.commission_type==='percent_profit')  commAmt = totals.profit * staffObj.commission_rate/100;
+      else if(staffObj.commission_type==='fixed') commAmt = staffObj.commission_rate;
+    }
     const saleData = {
       items,
       total:           totals.grandTotal,
@@ -530,6 +541,9 @@ function SalesPage({stock,setStock,setSales}){
       note, channel,
       customer_id:   customer?.customer_id||null,
       customer_name: customer?.name||null,
+      staff_id:      selectedStaff||null,
+      staff_name:    staffObj?.name||null,
+      commission_amount: Math.round(commAmt*100)/100,
     };
     const {error:sErr} = await supabase.from('sales').insert([saleData]);
     if(sErr){setMsg('❌ '+sErr.message); setSaving(false); return;}
@@ -542,7 +556,7 @@ function SalesPage({stock,setStock,setSales}){
     }
     await supabase.from('stock').upsert(ups,{onConflict:'sku'});
     setStock(ns); setSales(s=>[...s,saleData]);
-    setCart([]); setNote(''); setCustomer(null); setGlobalDisc('');
+    setCart([]); setNote(''); setCustomer(null); setGlobalDisc(''); setSelectedStaff('');
     setMsg('✅ บันทึกการขาย ฿'+fmt(totals.afterDisc)+' (VAT ฿'+fmt(totals.vatSum)+') — ตัดสต็อกแล้ว');
     setSaving(false);
   };
@@ -742,8 +756,17 @@ function SalesPage({stock,setStock,setSales}){
             <div style={{fontSize:12,color:T.textMuted,marginBottom:4}}>ลูกค้า</div>
             <CustomerSearch value={customer} onSelect={setCustomer}/>
 
+            {/* Staff selector */}
+            {staff.length>0&&(<>
+              <div style={{fontSize:12,color:T.textMuted,marginBottom:4,marginTop:10}}>พนักงานขาย (สำหรับค่าคอม)</div>
+              <select style={{...S.inp,width:'100%',marginBottom:8}} value={selectedStaff} onChange={e=>setSelectedStaff(e.target.value)}>
+                <option value="">— ไม่ระบุ —</option>
+                {staff.map(s=><option key={s.id} value={s.id}>{s.name} ({s.commission_type==='percent_revenue'?s.commission_rate+'% ยอดขาย':s.commission_type==='percent_profit'?s.commission_rate+'% กำไร':'฿'+s.commission_rate+'/ออเดอร์'})</option>)}
+              </select>
+            </>)}
+
             {/* Channel */}
-            <div style={{fontSize:12,color:T.textMuted,marginBottom:4,marginTop:10}}>ช่องทางขาย</div>
+            <div style={{fontSize:12,color:T.textMuted,marginBottom:4,marginTop:4}}>ช่องทางขาย</div>
             <select style={{...S.inp,width:'100%',marginBottom:8}} value={channel} onChange={e=>setChannel(e.target.value)}>
               {['In-store','Shopee','Lazada','LINE','Facebook','TikTok','Line Man','Grab','อื่นๆ'].map(c=><option key={c}>{c}</option>)}
             </select>
@@ -1014,6 +1037,46 @@ function ReportPage({stock,sales}){
         </div>
       )}
 
+      {/* Commission Summary */}
+      {(()=>{
+        const commMap={};
+        filtered.forEach(s=>{
+          if(!s.staff_name) return;
+          if(!commMap[s.staff_name]) commMap[s.staff_name]={name:s.staff_name,orders:0,revenue:0,commission:0};
+          commMap[s.staff_name].orders++;
+          commMap[s.staff_name].revenue+=s.total_after_vat||s.total||0;
+          commMap[s.staff_name].commission+=s.commission_amount||0;
+        });
+        const commRows=Object.values(commMap).sort((a,b)=>b.commission-a.commission);
+        if(!commRows.length) return null;
+        return(
+          <div style={S.card}>
+            <div style={{...S.cardTitle,justifyContent:'space-between'}}>
+              <span>💸 ค่าคอมมิชชันพนักงาน</span>
+              <button style={btn('gr',{fontSize:11,padding:'5px 12px'})} onClick={()=>{
+                if(!xlsxOk) return;
+                exportXLSX('commission_'+periodLabel()+'.xlsx',[{
+                  name:'ค่าคอม',
+                  headers:['พนักงาน','จำนวนออเดอร์','ยอดขาย (฿)','ค่าคอม (฿)'],
+                  data:commRows.map(r=>[r.name,r.orders,Math.round(r.revenue),Math.round(r.commission)])
+                }]);
+              }} disabled={!xlsxOk}>📥 Export</button>
+            </div>
+            <div style={S.tow}><table style={S.tbl}>
+              <thead><tr>{['พนักงาน','ออเดอร์','ยอดขาย','ค่าคอม'].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead>
+              <tbody>{commRows.map((r,i)=>(
+                <tr key={r.name}>
+                  <td style={{...tdr(i),fontWeight:500}}>{r.name}</td>
+                  <td style={tdr(i)}>{r.orders} ออเดอร์</td>
+                  <td style={tdr(i)}>฿{fmt(r.revenue)}</td>
+                  <td style={{...tdr(i),fontWeight:700,color:T.green}}>฿{fmt(r.commission)}</td>
+                </tr>
+              ))}</tbody>
+            </table></div>
+          </div>
+        );
+      })()}
+
       {/* Bill history */}
       <div style={S.card}>
         <div style={{...S.cardTitle,justifyContent:'space-between'}}>
@@ -1021,7 +1084,7 @@ function ReportPage({stock,sales}){
           {filtered.length>50&&<span style={{fontSize:11,color:T.textMuted,fontWeight:400}}>แสดง 50 รายการล่าสุด</span>}
         </div>
         <div style={S.tow}><table style={S.tbl}>
-          <thead><tr>{['วันที่','ลูกค้า','ช่องทาง','ยอดสุทธิ','VAT','กำไร','หมายเหตุ'].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead>
+          <thead><tr>{['วันที่','ลูกค้า','ช่องทาง','พนักงาน','ยอดสุทธิ','VAT','กำไร','ค่าคอม'].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead>
           <tbody>{filtered.length===0
             ?<tr><td colSpan={7} style={{...tdr(0),textAlign:'center',color:T.textMuted,padding:24}}>ไม่มีบิลในช่วงเวลานี้</td></tr>
             :filtered.slice(0,50).map((s,i)=>{
@@ -1032,10 +1095,11 @@ function ReportPage({stock,sales}){
                   <td style={{...tdr(i),whiteSpace:'nowrap'}}>{thDT(s.date)}</td>
                   <td style={tdr(i)}>{s.customer_name||'-'}</td>
                   <td style={tdr(i)}>{s.channel||'-'}</td>
+                  <td style={{...tdr(i),fontSize:11}}>{s.staff_name||'-'}</td>
                   <td style={{...tdr(i),fontWeight:500}}>฿{fmt(net)}</td>
                   <td style={{...tdr(i),color:T.textMuted,fontSize:11}}>{s.vat_amount?'฿'+fmt(s.vat_amount):'-'}</td>
                   <td style={{...tdr(i),color:(net-c)>=0?T.green:T.red}}>฿{fmt(net-c)}</td>
-                  <td style={{...tdr(i),color:T.textMuted,fontSize:11}}>{s.note||''}</td>
+                  <td style={{...tdr(i),color:T.green,fontWeight:500}}>{s.commission_amount>0?'฿'+fmt(s.commission_amount):'-'}</td>
                 </tr>
               );
             })}
@@ -1390,72 +1454,412 @@ function ProductPage({products, setProducts, stock, setStock}){
 
 
 // ════════════════════════════════════════════════════════
-// MAIN APP
+// LOGIN PAGE
 // ════════════════════════════════════════════════════════
-export default function App(){
-  const [tab,setTab]=useState('dash');
-  const [products,setProducts]=useState([]);
-  const [stock,setStock]=useState({});
-  const [sales,setSales]=useState([]);
-  const [loading,setLoading]=useState(true);
-  const [error,setError]=useState('');
+function LoginPage({onLogin}){
+  const [email,setEmail]   = useState('');
+  const [pass,setPass]     = useState('');
+  const [loading,setLoading]= useState(false);
+  const [error,setError]   = useState('');
+
+  const doLogin = async e => {
+    e.preventDefault();
+    setLoading(true); setError('');
+    const {data,error:err} = await supabase.auth.signInWithPassword({email,password:pass});
+    if(err){ setError('อีเมลหรือรหัสผ่านไม่ถูกต้อง'); setLoading(false); return; }
+    // Load profile
+    const {data:prof} = await supabase.from('profiles').select('*').eq('id',data.user.id).single();
+    if(!prof?.active){ await supabase.auth.signOut(); setError('บัญชีนี้ถูกระงับการใช้งาน'); setLoading(false); return; }
+    onLogin(data.user, prof);
+    setLoading(false);
+  };
+
+  return(
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#1B3A2D 0%,#2D5C45 100%)'}}>
+      <div style={{background:'#fff',borderRadius:16,padding:'40px 36px',width:360,boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
+        <div style={{textAlign:'center',marginBottom:28}}>
+          <div style={{fontSize:40,marginBottom:8}}>☕</div>
+          <div style={{fontWeight:700,fontSize:20,color:'#1B3A2D'}}>สันติพาณิชย์</div>
+          <div style={{fontSize:13,color:'#888',marginTop:4}}>Stock Management System</div>
+        </div>
+        <form onSubmit={doLogin}>
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:12,color:'#555',marginBottom:5,fontWeight:500}}>อีเมล</div>
+            <input type="email" required style={{width:'100%',padding:'10px 12px',border:'1.5px solid #ddd',borderRadius:8,fontSize:14,outline:'none',boxSizing:'border-box'}}
+              placeholder="your@email.com" value={email} onChange={e=>setEmail(e.target.value)}/>
+          </div>
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:12,color:'#555',marginBottom:5,fontWeight:500}}>รหัสผ่าน</div>
+            <input type="password" required style={{width:'100%',padding:'10px 12px',border:'1.5px solid #ddd',borderRadius:8,fontSize:14,outline:'none',boxSizing:'border-box'}}
+              placeholder="••••••••" value={pass} onChange={e=>setPass(e.target.value)}/>
+          </div>
+          {error&&<div style={{background:'#FEE2E2',color:'#DC2626',padding:'9px 12px',borderRadius:7,fontSize:12,marginBottom:14,fontWeight:500}}>{error}</div>}
+          <button type="submit" disabled={loading} style={{width:'100%',padding:'12px 0',background:'#1B3A2D',color:'#EFF7F3',border:'none',borderRadius:8,fontSize:15,fontWeight:600,cursor:'pointer'}}>
+            {loading?'กำลังเข้าสู่ระบบ...':'เข้าสู่ระบบ'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════
+// ADMIN — USER MANAGEMENT PAGE
+// ════════════════════════════════════════════════════════
+function UserManagePage({profile}){
+  const [users,setUsers]   = useState([]);
+  const [staff,setStaff]   = useState([]);
+  const [loading,setLoading]= useState(true);
+  const [msg,setMsg]       = useState('');
+  const [showInvite,setShowInvite] = useState(false);
+  const [invEmail,setInvEmail]     = useState('');
+  const [invName,setInvName]       = useState('');
+  const [invRole,setInvRole]       = useState('sales');
+  const [invPass,setInvPass]       = useState('');
+  const [saving,setSaving] = useState(false);
+
+  // Staff commission form
+  const [showStaff,setShowStaff]   = useState(false);
+  const [staffForm,setStaffForm]   = useState({name:'',commission_type:'percent_revenue',commission_rate:0});
 
   useEffect(()=>{
     (async()=>{
-      // Load products, stock, sales in parallel
-      const [prodRes, stRes, salRes] = await Promise.all([
-        supabase.from('products').select('*').order('cat').order('name'),
-        supabase.from('stock').select('*'),
-        supabase.from('sales').select('*').order('date',{ascending:false}).limit(2000)
+      const [{data:u},{data:s}] = await Promise.all([
+        supabase.from('profiles').select('*').order('created_at'),
+        supabase.from('staff').select('*').order('name'),
       ]);
-      if(prodRes.error){setError('โหลดข้อมูลสินค้าไม่ได้: '+prodRes.error.message);setLoading(false);return;}
-      if(stRes.error){setError('โหลดสต็อกไม่ได้: '+stRes.error.message);setLoading(false);return;}
-      // Build product index
-      const prods = (prodRes.data||[]).map(p=>[p.sku,p.name,p.cat,p.sell,p.cost]);
-      buildProductIndex(prods);
-      setProducts(prods);
-      // Build stock map
-      const sm={};
-      (stRes.data||[]).forEach(r=>{sm[r.sku]={qty:r.qty,safety:r.safety,cost:r.cost};});
-      setStock(sm);
-      setSales(salRes.data||[]);
-      setLoading(false);
+      setUsers(u||[]); setStaff(s||[]); setLoading(false);
     })();
   },[]);
 
-  const tabs=[['report','📊','Dashboard & รายงาน'],['stock','📦','สต็อก'],['products','🏷️','สินค้า'],['sales','💰','บันทึกขาย'],['plan','🏭','แผนผลิต']];
+  const updateRole = async (id,role) => {
+    await supabase.from('profiles').update({role}).eq('id',id);
+    setUsers(u=>u.map(x=>x.id===id?{...x,role}:x));
+  };
 
-  if(loading)return<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:12,color:T.textMuted,fontFamily:"Arial,sans-serif"}}><div style={{fontSize:40}}>☕</div><div>กำลังโหลดระบบ...</div></div>;
-  if(error)return<div style={{padding:40,color:T.red,fontFamily:"Arial,sans-serif"}}>❌ {error}</div>;
+  const toggleActive = async (id,active) => {
+    await supabase.from('profiles').update({active:!active}).eq('id',id);
+    setUsers(u=>u.map(x=>x.id===id?{...x,active:!active}:x));
+  };
+
+  const inviteUser = async () => {
+    if(!invEmail||!invName||!invPass){setMsg('❌ กรอกข้อมูลให้ครบ');return;}
+    setSaving(true); setMsg('');
+    const {data,error} = await supabase.auth.signUp({
+      email:invEmail, password:invPass,
+      options:{data:{full_name:invName}}
+    });
+    if(error){setMsg('❌ '+error.message);setSaving(false);return;}
+    // Update profile role
+    if(data.user){
+      await supabase.from('profiles').upsert({id:data.user.id,email:invEmail,full_name:invName,role:invRole,active:true},{onConflict:'id'});
+    }
+    setMsg('✅ เพิ่มผู้ใช้ '+invName+' เรียบร้อย');
+    setInvEmail('');setInvName('');setInvPass('');setInvRole('sales');
+    setShowInvite(false);setSaving(false);
+    // Reload
+    const {data:u} = await supabase.from('profiles').select('*').order('created_at');
+    setUsers(u||[]);
+  };
+
+  const saveStaff = async () => {
+    if(!staffForm.name){setMsg('❌ กรอกชื่อพนักงาน');return;}
+    setSaving(true);
+    const {error} = await supabase.from('staff').insert([staffForm]);
+    if(error){setMsg('❌ '+error.message);setSaving(false);return;}
+    setMsg('✅ เพิ่มพนักงาน '+staffForm.name+' เรียบร้อย');
+    setStaffForm({name:'',commission_type:'percent_revenue',commission_rate:0});
+    setShowStaff(false);setSaving(false);
+    const {data:s} = await supabase.from('staff').select('*').order('name');
+    setStaff(s||[]);
+  };
+
+  const ROLE_LABELS = {admin:'👑 Admin',sales:'💰 Sales',warehouse:'📦 Warehouse'};
+  const COMM_LABELS = {percent_revenue:'% จากยอดขาย',percent_profit:'% จากกำไร',fixed:'บาท/ออเดอร์'};
+
+  if(loading) return <div style={{padding:40,textAlign:'center',color:'#888'}}>⏳ กำลังโหลด...</div>;
+
+  return(
+    <div>
+      {msg&&<div style={{...S.card,background:msg.startsWith('✅')?T.greenLight:T.redLight,color:msg.startsWith('✅')?T.green:T.red,fontWeight:500,marginBottom:12}}>{msg}</div>}
+
+      {/* Users */}
+      <div style={S.card}>
+        <div style={{...S.row,justifyContent:'space-between',marginBottom:12}}>
+          <div style={S.cardTitle}>👥 ผู้ใช้งานระบบ ({users.length} คน)</div>
+          <button style={btn('dk')} onClick={()=>setShowInvite(!showInvite)}>➕ เพิ่มผู้ใช้ใหม่</button>
+        </div>
+
+        {showInvite&&(
+          <div style={{background:T.blueLight,borderRadius:T.radius,padding:'14px 16px',marginBottom:14,border:`1px solid ${T.blue}`}}>
+            <div style={{fontWeight:600,color:T.blue,marginBottom:12}}>เพิ่มผู้ใช้ใหม่</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px 12px'}}>
+              <div>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:3}}>ชื่อ-นามสกุล</div>
+                <input style={{...S.inp,width:'100%'}} placeholder="ชื่อ นามสกุล" value={invName} onChange={e=>setInvName(e.target.value)}/>
+              </div>
+              <div>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:3}}>อีเมล</div>
+                <input type="email" style={{...S.inp,width:'100%'}} placeholder="email@domain.com" value={invEmail} onChange={e=>setInvEmail(e.target.value)}/>
+              </div>
+              <div>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:3}}>รหัสผ่าน</div>
+                <input type="password" style={{...S.inp,width:'100%'}} placeholder="อย่างน้อย 6 ตัว" value={invPass} onChange={e=>setInvPass(e.target.value)}/>
+              </div>
+              <div>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:3}}>สิทธิ์</div>
+                <select style={{...S.inp,width:'100%'}} value={invRole} onChange={e=>setInvRole(e.target.value)}>
+                  <option value="admin">👑 Admin — เห็นทุกอย่าง</option>
+                  <option value="sales">💰 Sales — เห็นขาย+สต็อก (ไม่เห็นต้นทุน/กำไร)</option>
+                  <option value="warehouse">📦 Warehouse — เห็นแค่สต็อก</option>
+                </select>
+              </div>
+            </div>
+            <div style={{...S.row,marginTop:10,gap:8}}>
+              <button style={btn('gr')} onClick={inviteUser} disabled={saving}>{saving?'กำลังสร้าง...':'💾 สร้างบัญชี'}</button>
+              <button style={btn('gy')} onClick={()=>setShowInvite(false)}>ยกเลิก</button>
+            </div>
+          </div>
+        )}
+
+        <div style={S.tow}>
+          <table style={S.tbl}>
+            <thead><tr>{['ชื่อ','อีเมล','สิทธิ์','สถานะ','เปลี่ยนสิทธิ์','จัดการ'].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead>
+            <tbody>
+              {users.map((u,i)=>(
+                <tr key={u.id}>
+                  <td style={{...tdr(i),fontWeight:500}}>{u.full_name||'-'}{u.id===profile.id&&<span style={{fontSize:10,color:T.blue,marginLeft:6}}>(คุณ)</span>}</td>
+                  <td style={{...tdr(i),fontSize:11,color:T.textMuted}}>{u.email}</td>
+                  <td style={tdr(i)}>{ROLE_LABELS[u.role]||u.role}</td>
+                  <td style={tdr(i)}><span style={{...bdg(u.active?'ok':'out'),fontSize:11}}>{u.active?'ใช้งานได้':'ระงับแล้ว'}</span></td>
+                  <td style={tdr(i)}>
+                    {u.id!==profile.id&&(
+                      <select style={{...S.inp,padding:'3px 6px',fontSize:11}} value={u.role} onChange={e=>updateRole(u.id,e.target.value)}>
+                        <option value="admin">Admin</option>
+                        <option value="sales">Sales</option>
+                        <option value="warehouse">Warehouse</option>
+                      </select>
+                    )}
+                  </td>
+                  <td style={tdr(i)}>
+                    {u.id!==profile.id&&(
+                      <button style={btn(u.active?'rd':'gr',{padding:'3px 10px',fontSize:11})} onClick={()=>toggleActive(u.id,u.active)}>
+                        {u.active?'ระงับ':'เปิดใช้'}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Staff & Commission */}
+      <div style={S.card}>
+        <div style={{...S.row,justifyContent:'space-between',marginBottom:12}}>
+          <div style={S.cardTitle}>💸 พนักงานขายและค่าคอมมิชชัน</div>
+          <button style={btn('dk')} onClick={()=>setShowStaff(!showStaff)}>➕ เพิ่มพนักงานขาย</button>
+        </div>
+
+        {showStaff&&(
+          <div style={{background:T.greenLight,borderRadius:T.radius,padding:'14px 16px',marginBottom:14,border:`1px solid ${T.green}`}}>
+            <div style={{fontWeight:600,color:T.green,marginBottom:12}}>เพิ่มพนักงานขาย</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'8px 12px'}}>
+              <div>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:3}}>ชื่อพนักงาน</div>
+                <input style={{...S.inp,width:'100%'}} placeholder="ชื่อ นามสกุล" value={staffForm.name} onChange={e=>setStaffForm(f=>({...f,name:e.target.value}))}/>
+              </div>
+              <div>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:3}}>ประเภทค่าคอม</div>
+                <select style={{...S.inp,width:'100%'}} value={staffForm.commission_type} onChange={e=>setStaffForm(f=>({...f,commission_type:e.target.value}))}>
+                  <option value="percent_revenue">% จากยอดขาย</option>
+                  <option value="percent_profit">% จากกำไร</option>
+                  <option value="fixed">บาทต่อออเดอร์</option>
+                </select>
+              </div>
+              <div>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:3}}>อัตราค่าคอม ({staffForm.commission_type==='fixed'?'฿':'%'})</div>
+                <input type="number" min="0" step="0.1" style={{...S.inp,width:'100%'}} placeholder="0" value={staffForm.commission_rate} onChange={e=>setStaffForm(f=>({...f,commission_rate:parseFloat(e.target.value)||0}))}/>
+              </div>
+            </div>
+            <div style={{...S.row,marginTop:10,gap:8}}>
+              <button style={btn('gr')} onClick={saveStaff} disabled={saving}>{saving?'กำลังบันทึก...':'💾 บันทึก'}</button>
+              <button style={btn('gy')} onClick={()=>setShowStaff(false)}>ยกเลิก</button>
+            </div>
+          </div>
+        )}
+
+        <div style={S.tow}>
+          <table style={S.tbl}>
+            <thead><tr>{['ชื่อพนักงาน','ประเภทค่าคอม','อัตรา','สถานะ'].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead>
+            <tbody>
+              {staff.length===0
+                ?<tr><td colSpan={4} style={{...tdr(0),textAlign:'center',color:T.textMuted,padding:24}}>ยังไม่มีพนักงานขาย — กด ➕ เพื่อเพิ่ม</td></tr>
+                :staff.map((s,i)=>(
+                  <tr key={s.id}>
+                    <td style={{...tdr(i),fontWeight:500}}>{s.name}</td>
+                    <td style={tdr(i)}>{COMM_LABELS[s.commission_type]||s.commission_type}</td>
+                    <td style={tdr(i)}>{s.commission_type==='fixed'?'฿'+fmt(s.commission_rate):fmtD(s.commission_rate)+'%'}</td>
+                    <td style={tdr(i)}><span style={{...bdg(s.active?'ok':'out'),fontSize:11}}>{s.active?'ใช้งาน':'ปิดใช้'}</span></td>
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════
+// MAIN APP — with Auth
+// ════════════════════════════════════════════════════════
+export default function App(){
+  const [user,setUser]       = useState(null);
+  const [profile,setProfile] = useState(null);
+  const [authLoading,setAuthLoading] = useState(true);
+  const [tab,setTab]         = useState('report');
+  const [products,setProducts] = useState([]);
+  const [stock,setStock]     = useState({});
+  const [sales,setSales]     = useState([]);
+  const [staff,setStaff]     = useState([]);
+  const [loading,setLoading] = useState(true);
+  const [error,setError]     = useState('');
+
+  // Check existing session
+  useEffect(()=>{
+    supabase.auth.getSession().then(async({data:{session}})=>{
+      if(session?.user){
+        const {data:prof} = await supabase.from('profiles').select('*').eq('id',session.user.id).single();
+        if(prof?.active){ setUser(session.user); setProfile(prof); }
+        else { await supabase.auth.signOut(); }
+      }
+      setAuthLoading(false);
+    });
+    // Listen for auth changes
+    const {data:{subscription}} = supabase.auth.onAuthStateChange(async(event,session)=>{
+      if(event==='SIGNED_OUT'){ setUser(null); setProfile(null); }
+    });
+    return ()=>subscription.unsubscribe();
+  },[]);
+
+  // Load data after login
+  useEffect(()=>{
+    if(!user) return;
+    (async()=>{
+      setLoading(true);
+      const isAdmin   = profile?.role==='admin';
+      const isSales   = profile?.role==='sales';
+      const isWarehouse = profile?.role==='warehouse';
+
+      const loads = [
+        supabase.from('products').select('*').order('cat').order('name'),
+        supabase.from('stock').select('*'),
+        supabase.from('staff').select('*').eq('active',true).order('name'),
+      ];
+      // Sales & reports: admin + sales see sales; warehouse does not
+      if(isAdmin||isSales){
+        loads.push(supabase.from('sales').select('*').order('date',{ascending:false}).limit(2000));
+      }
+
+      const results = await Promise.all(loads);
+      const [prodRes,stRes,staffRes,salRes] = results;
+
+      if(prodRes.error){ setError('โหลดสินค้าไม่ได้: '+prodRes.error.message); setLoading(false); return; }
+      const prods = (prodRes.data||[]).map(p=>[p.sku,p.name,p.cat,p.sell,p.cost]);
+      buildProductIndex(prods);
+      setProducts(prods);
+
+      const sm={};
+      (stRes.data||[]).forEach(r=>{ sm[r.sku]={qty:r.qty,safety:r.safety,cost:r.cost}; });
+      setStock(sm);
+      setStaff(staffRes.data||[]);
+      if(salRes) setSales(salRes.data||[]);
+      setLoading(false);
+    })();
+  },[user]);
+
+  const logout = async()=>{
+    await supabase.auth.signOut();
+    setUser(null); setProfile(null);
+    setStock({}); setSales([]); setProducts([]);
+  };
+
+  // Role-based tab access
+  const isAdmin     = profile?.role==='admin';
+  const isSales     = profile?.role==='sales';
+  const isWarehouse = profile?.role==='warehouse';
+
+  const allTabs = [
+    {v:'report',    icon:'📊', l:'Dashboard & รายงาน', roles:['admin','sales']},
+    {v:'stock',     icon:'📦', l:'สต็อก',               roles:['admin','sales','warehouse']},
+    {v:'products',  icon:'🏷️', l:'สินค้า',              roles:['admin']},
+    {v:'sales',     icon:'💰', l:'บันทึกขาย',           roles:['admin','sales']},
+    {v:'plan',      icon:'🏭', l:'แผนผลิต',             roles:['admin']},
+    {v:'users',     icon:'👥', l:'จัดการผู้ใช้',         roles:['admin']},
+  ];
+  const visibleTabs = allTabs.filter(t=>t.roles.includes(profile?.role||''));
+
+  // Set default tab by role
+  useEffect(()=>{
+    if(!profile) return;
+    if(isWarehouse) setTab('stock');
+    else setTab('report');
+  },[profile]);
+
+  if(authLoading) return(
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#1B3A2D,#2D5C45)',flexDirection:'column',gap:12,color:'#EFF7F3',fontFamily:"Arial,sans-serif"}}>
+      <div style={{fontSize:48}}>☕</div>
+      <div style={{fontSize:14}}>กำลังโหลด...</div>
+    </div>
+  );
+
+  if(!user||!profile) return <LoginPage onLogin={(u,p)=>{setUser(u);setProfile(p);}}/>;
+
+  if(loading) return(
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:12,color:T.textMuted,fontFamily:"Arial,sans-serif"}}>
+      <div style={{fontSize:40}}>☕</div><div>กำลังโหลดข้อมูล...</div>
+    </div>
+  );
+  if(error) return <div style={{padding:40,color:T.red,fontFamily:"Arial,sans-serif"}}>❌ {error}</div>;
 
   return(
     <div style={{background:T.bg,minHeight:'100vh'}}>
       <div style={S.wrap}>
+        {/* Header */}
         <div style={S.hdr}>
           <div>
-            <div style={{fontWeight:700,fontSize:17,letterSpacing:'0.02em'}}>☕ สันติพาณิชย์ Stock System</div>
-            <div style={{fontSize:11,color:'#7EC4A2',marginTop:3}}>v3 · Real-time · Export Excel · VAT · Import/Export</div>
+            <div style={{fontWeight:700,fontSize:16,letterSpacing:'0.02em'}}>☕ สันติพาณิชย์ Stock</div>
+            <div style={{fontSize:11,color:'#7EC4A2',marginTop:2}}>
+              {isAdmin?'👑 Admin':isSales?'💰 Sales':'📦 Warehouse'} · {profile.full_name||profile.email}
+            </div>
           </div>
-          <div style={{textAlign:'right'}}>
-            <div style={{fontSize:13,color:'#7EC4A2'}}>{PR.length} SKU</div>
-            <div style={{fontSize:10,color:'#5a9a7a'}}>{new Date().toLocaleDateString('th-TH',{weekday:'short',day:'2-digit',month:'short',year:'2-digit'})}</div>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <div style={{fontSize:10,color:'#5a9a7a'}}>{PR.length} SKU</div>
+            <button onClick={logout} style={{padding:'6px 12px',background:'rgba(255,255,255,0.15)',color:'#EFF7F3',border:'1px solid rgba(255,255,255,0.3)',borderRadius:6,cursor:'pointer',fontSize:12}}>
+              ออกจากระบบ
+            </button>
           </div>
         </div>
+
+        {/* Nav — only show allowed tabs */}
         <div style={S.nav}>
-          {tabs.map(([v,icon,l])=>(
-            <button key={v} style={{...nbtn(tab===v),display:'flex',alignItems:'center',gap:5,flex:1,justifyContent:'center'}} onClick={()=>setTab(v)}>
-              <span>{icon}</span><span>{l}</span>
+          {visibleTabs.map(t=>(
+            <button key={t.v} style={{...nbtn(tab===t.v),display:'flex',alignItems:'center',gap:5,flex:1,justifyContent:'center',fontSize:12}} onClick={()=>setTab(t.v)}>
+              <span>{t.icon}</span><span>{t.l}</span>
             </button>
           ))}
         </div>
-        {tab==='dash'     &&<Dashboard stock={stock} sales={sales}/>}
-        {tab==='stock'    &&<StockPage stock={stock} setStock={setStock}/>}
-        {tab==='products' &&<ProductPage products={products} setProducts={setProducts} stock={stock} setStock={setStock}/>}
-        {tab==='report'  &&<ReportPage stock={stock} sales={sales}/>}
-        {tab==='stock'   &&<StockPage  stock={stock} setStock={setStock}/>}
-        {tab==='products'&&<ProductPage products={products} setProducts={setProducts} stock={stock} setStock={setStock}/>}
-        {tab==='sales'   &&<SalesPage  stock={stock} setStock={setStock} setSales={setSales}/>}
-        {tab==='plan'    &&<PlanPage   stock={stock} sales={sales}/>}
+
+        {/* Pages — role-gated */}
+        {tab==='report'  &&(isAdmin||isSales) &&<ReportPage   stock={stock} sales={sales}/>}
+        {tab==='stock'                         &&<StockPage    stock={stock} setStock={setStock} profile={profile}/>}
+        {tab==='products'&&isAdmin             &&<ProductPage  products={products} setProducts={setProducts} stock={stock} setStock={setStock}/>}
+        {tab==='sales'   &&(isAdmin||isSales)  &&<SalesPage    stock={stock} setStock={setStock} setSales={setSales} staff={staff} profile={profile}/>}
+        {tab==='plan'    &&isAdmin             &&<PlanPage     stock={stock} sales={sales}/>}
+        {tab==='users'   &&isAdmin             &&<UserManagePage profile={profile}/>}
       </div>
     </div>
   );
