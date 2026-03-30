@@ -60,6 +60,7 @@ const S = {
 const btn=(v='dk',ex={})=>{
   const m={
     dk:{ bg:T.dark,fg:'#EFF7F3',hov:'#243d30' },
+    bl:{ bg:'#1A5276',fg:'#fff',hov:'#154360' },
     gr:{ bg:T.green,fg:'#fff',hov:'#15803d' },
     rd:{ bg:T.red,fg:'#fff',hov:'#b91c1c' },
     gy:{ bg:'#E5E7EB',fg:'#374151',hov:'#D1D5DB' },
@@ -430,6 +431,146 @@ function StockPage({stock,setStock,profile}){
 // ════════════════════════════════════════════════════════
 // SALES PAGE — ราคาแก้ได้ + ส่วนลด + VAT
 // ════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════
+// RECEIPT & TAX INVOICE PRINTER
+// ════════════════════════════════════════════════════════
+const COMPANY = {
+  name:    'บริษัท สันติพาณิชย์ โรสเตอร์ จำกัด',
+  address: '29/35 หมู่ที่ 6 ตำบลโคกแย้ อำเภอหนองแค จังหวัดสระบุรี 18230',
+  tel:     '095-356-2974',
+  tax_id:  '0195561000941',
+};
+
+function buildReceiptHTML(sale, type='receipt') {
+  const isInvoice = type === 'invoice';
+  const docTitle  = isInvoice ? 'ใบกำกับภาษี' : 'ใบเสร็จรับเงิน';
+  const now       = new Date(sale.date||Date.now());
+  const dateStr   = now.toLocaleDateString('th-TH',{day:'2-digit',month:'long',year:'numeric'});
+  const timeStr   = now.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+  const receiptNo = 'RC-'+String(sale.id||Date.now()).slice(-8);
+
+  const items = sale.items||[];
+  const subtotalNoVat = items.reduce((s,it)=>{
+    if(it.vat_mode==='included') return s+(it.subtotal||0)-(it.vat_amount||0);
+    return s+(it.subtotal||0);
+  },0);
+  const vatAmt   = sale.vat_amount||0;
+  const discAmt  = sale.discount_amount||0;
+  const grandTotal = sale.total_after_vat||sale.total||0;
+
+  const rows = items.map(it=>`
+    <tr>
+      <td>${it.name}</td>
+      <td style="text-align:center">${it.qty}</td>
+      <td style="text-align:right">฿${Number(it.sell||0).toFixed(2)}</td>
+      <td style="text-align:center;font-size:10px;color:#666">${
+        it.vat_mode==='included'?'รวม VAT':
+        it.vat_mode==='add'?'+VAT 7%':'ไม่มี VAT'
+      }</td>
+      <td style="text-align:right">฿${Number(it.subtotal||0).toFixed(2)}</td>
+    </tr>
+  `).join('');
+
+  return `<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>${docTitle}</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'Noto Sans Thai',Arial,sans-serif; font-size:13px; color:#1a1a1a; background:#fff; }
+  .page { width:80mm; margin:0 auto; padding:6mm; }
+  .center { text-align:center; }
+  .co-name { font-size:16px; font-weight:700; color:#1B3A2D; margin-bottom:2px; }
+  .doc-title { font-size:14px; font-weight:600; margin:8px 0 4px; border-top:2px solid #1B3A2D; border-bottom:2px solid #1B3A2D; padding:4px 0; }
+  .info-row { display:flex; justify-content:space-between; font-size:11px; color:#555; margin-bottom:2px; }
+  table { width:100%; border-collapse:collapse; margin:8px 0; font-size:11px; }
+  th { background:#1B3A2D; color:#fff; padding:5px 4px; text-align:left; }
+  td { padding:4px; border-bottom:1px solid #eee; vertical-align:top; }
+  .total-section { border-top:1px dashed #ccc; padding-top:6px; margin-top:4px; }
+  .total-row { display:flex; justify-content:space-between; font-size:12px; padding:2px 0; }
+  .grand-total { font-size:16px; font-weight:700; color:#1B3A2D; border-top:2px solid #1B3A2D; padding-top:6px; margin-top:4px; }
+  .footer { text-align:center; font-size:10px; color:#888; margin-top:12px; border-top:1px dashed #ccc; padding-top:8px; }
+  .tax-id { font-size:10px; color:#555; }
+  @media print {
+    body { margin:0; }
+    .page { width:100%; padding:4mm; }
+    .no-print { display:none; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="center">
+    <div class="co-name">☕ ${COMPANY.name}</div>
+    <div style="font-size:10px;color:#555">${COMPANY.address}</div>
+    <div style="font-size:10px;color:#555">โทร: ${COMPANY.tel}</div>
+    ${isInvoice?`<div class="tax-id">เลขประจำตัวผู้เสียภาษี: ${COMPANY.tax_id}</div>`:''}
+    <div class="doc-title">${docTitle}</div>
+  </div>
+
+  <div class="info-row"><span>เลขที่:</span><span><b>${receiptNo}</b></span></div>
+  <div class="info-row"><span>วันที่:</span><span>${dateStr} ${timeStr}</span></div>
+  ${sale.customer_name?`<div class="info-row"><span>ลูกค้า:</span><span>${sale.customer_name}</span></div>`:''}
+  ${sale.channel?`<div class="info-row"><span>ช่องทาง:</span><span>${sale.channel}</span></div>`:''}
+  ${sale.staff_name?`<div class="info-row"><span>พนักงานขาย:</span><span>${sale.staff_name}</span></div>`:''}
+
+  <table>
+    <thead>
+      <tr>
+        <th>รายการ</th>
+        <th style="text-align:center">จำนวน</th>
+        <th style="text-align:right">ราคา</th>
+        <th style="text-align:center">VAT</th>
+        <th style="text-align:right">รวม</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+
+  <div class="total-section">
+    ${discAmt>0?`<div class="total-row"><span>ราคารวม</span><span>฿${Number(subtotalNoVat+vatAmt).toFixed(2)}</span></div>`:''}
+    ${vatAmt>0?`<div class="total-row"><span>VAT 7%</span><span>฿${Number(vatAmt).toFixed(2)}</span></div>`:''}
+    ${discAmt>0?`<div class="total-row" style="color:#DC2626"><span>ส่วนลด</span><span>-฿${Number(discAmt).toFixed(2)}</span></div>`:''}
+    <div class="total-row grand-total">
+      <span>ยอดรวมทั้งสิ้น</span>
+      <span>฿${Number(grandTotal).toFixed(2)}</span>
+    </div>
+  </div>
+
+  ${sale.note?`<div style="font-size:11px;color:#555;margin-top:6px">หมายเหตุ: ${sale.note}</div>`:''}
+
+  <div class="footer">
+    ขอบคุณที่ใช้บริการ<br>
+    ${COMPANY.name}<br>
+    ${isInvoice?'ใบกำกับภาษีอย่างย่อ':'ใบเสร็จรับเงินฉบับนี้ถือเป็นหลักฐานการชำระเงิน'}
+  </div>
+
+  <div class="no-print" style="text-align:center;margin-top:16px">
+    <button onclick="window.print()" style="padding:10px 24px;background:#1B3A2D;color:#EFF7F3;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-family:inherit">
+      🖨️ พิมพ์ / บันทึก PDF
+    </button>
+  </div>
+</div>
+</body>
+</html>`;
+}
+
+function printReceipt(sale) {
+  const html = buildReceiptHTML(sale, 'receipt');
+  const w = window.open('', '_blank', 'width=400,height=700');
+  w.document.write(html);
+  w.document.close();
+}
+
+function printTaxInvoice(sale) {
+  const html = buildReceiptHTML(sale, 'invoice');
+  const w = window.open('', '_blank', 'width=400,height=700');
+  w.document.write(html);
+  w.document.close();
+}
+
 function SalesPage({stock,setStock,setSales,staff=[],profile}){
   const [kw,setKw]           = useState('');
   const [cart,setCart]       = useState([]);
@@ -438,6 +579,7 @@ function SalesPage({stock,setStock,setSales,staff=[],profile}){
   const [channel,setChannel] = useState('In-store');
   const [globalDisc,setGlobalDisc] = useState('');
   const [selectedStaff,setSelectedStaff] = useState('');
+  const [lastSale,setLastSale] = useState(null);
   const [saving,setSaving]   = useState(false);
   const [msg,setMsg]         = useState('');
   const [importMsg,setImportMsg] = useState('');
@@ -556,6 +698,8 @@ function SalesPage({stock,setStock,setSales,staff=[],profile}){
     }
     await supabase.from('stock').upsert(ups,{onConflict:'sku'});
     setStock(ns); setSales(s=>[...s,saleData]);
+    const savedSale = {...saleData, id: Date.now(), date: new Date().toISOString()};
+    setLastSale(savedSale);
     setCart([]); setNote(''); setCustomer(null); setGlobalDisc(''); setSelectedStaff('');
     setMsg('✅ บันทึกการขาย ฿'+fmt(totals.afterDisc)+' (VAT ฿'+fmt(totals.vatSum)+') — ตัดสต็อกแล้ว');
     setSaving(false);
@@ -779,6 +923,12 @@ function SalesPage({stock,setStock,setSales,staff=[],profile}){
               {saving?'กำลังบันทึก...':'✅ ยืนยันการขาย'}
             </button>
             {msg&&<div style={{marginTop:10,padding:'9px 12px',borderRadius:T.radius,fontSize:12,background:msg.startsWith('✅')?T.greenLight:T.redLight,color:msg.startsWith('✅')?T.green:T.red,fontWeight:500}}>{msg}</div>}
+            {lastSale&&(
+              <div style={{marginTop:10,display:'flex',gap:8}}>
+                <button style={{...btn('dk'),flex:1,fontSize:12}} onClick={()=>printReceipt(lastSale)}>🖨️ พิมพ์ใบเสร็จ</button>
+                <button style={{...btn('bl'),flex:1,fontSize:12}} onClick={()=>printTaxInvoice(lastSale)}>🧾 ใบกำกับภาษี</button>
+              </div>
+            )}
           </div>
         </div>
       </div>
