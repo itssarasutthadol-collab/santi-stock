@@ -266,6 +266,169 @@ function Dashboard({stock,sales}){
 // ════════════════════════════════════════════════════════
 // STOCK PAGE
 // ════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════
+// LINE NOTIFY
+// ════════════════════════════════════════════════════════
+const LINE_TOKEN_KEY = 'line_notify_token';
+
+async function sendLineNotify(token, message) {
+  // ส่งผ่าน Supabase Edge Function หรือ proxy
+  // เพราะ LINE Notify ไม่รองรับ CORS จาก browser โดยตรง
+  try {
+    const res = await fetch('https://notify-api.line.me/api/notify', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: 'message=' + encodeURIComponent(message),
+      mode: 'no-cors',
+    });
+    return true;
+  } catch(e) {
+    console.error('LINE Notify error:', e);
+    return false;
+  }
+}
+
+async function sendStockAlert(stock) {
+  const token = localStorage.getItem(LINE_TOKEN_KEY);
+  if (!token) return;
+
+  const outItems = PR.filter(p => (stock[p[0]]?.qty||0) === 0);
+  const lowItems = PR.filter(p => {
+    const d = stock[p[0]]||{qty:0,safety:10};
+    return d.qty > 0 && d.qty <= d.safety;
+  });
+
+  if (outItems.length === 0 && lowItems.length === 0) return;
+
+  let msg = '\n🔔 แจ้งเตือนสต็อก — สันติพาณิชย์\n';
+  msg += '━━━━━━━━━━━━━━━━━━━━\n';
+
+  if (outItems.length > 0) {
+    msg += `\n❌ หมดสต็อก (${outItems.length} รายการ)\n`;
+    outItems.slice(0, 10).forEach(p => {
+      msg += `• ${p[1]}\n`;
+    });
+    if (outItems.length > 10) msg += `  ...และอีก ${outItems.length-10} รายการ\n`;
+  }
+
+  if (lowItems.length > 0) {
+    msg += `\n⚠️ ใกล้หมด (${lowItems.length} รายการ)\n`;
+    lowItems.slice(0, 10).forEach(p => {
+      const d = stock[p[0]]||{qty:0,safety:10};
+      msg += `• ${p[1]} (เหลือ ${d.qty}/${d.safety})\n`;
+    });
+    if (lowItems.length > 10) msg += `  ...และอีก ${lowItems.length-10} รายการ\n`;
+  }
+
+  msg += '━━━━━━━━━━━━━━━━━━━━';
+  await sendLineNotify(token, msg);
+}
+
+// LINE Notify Settings Component
+function LineNotifySettings({stock}) {
+  const [token, setToken] = useState(() => localStorage.getItem(LINE_TOKEN_KEY)||'');
+  const [saved, setSaved]   = useState(!!localStorage.getItem(LINE_TOKEN_KEY));
+  const [testing, setTesting] = useState(false);
+  const [testMsg, setTestMsg] = useState('');
+
+  const saveToken = () => {
+    if (!token.trim()) {
+      localStorage.removeItem(LINE_TOKEN_KEY);
+      setSaved(false);
+      setTestMsg('ลบ Token แล้ว');
+      return;
+    }
+    localStorage.setItem(LINE_TOKEN_KEY, token.trim());
+    setSaved(true);
+    setTestMsg('✅ บันทึก Token แล้ว');
+  };
+
+  const testNotify = async () => {
+    const t = localStorage.getItem(LINE_TOKEN_KEY);
+    if (!t) { setTestMsg('❌ กรุณาบันทึก Token ก่อน'); return; }
+    setTesting(true); setTestMsg('');
+    const ok = await sendLineNotify(t,
+      '\n✅ ทดสอบการแจ้งเตือน\nสันติพาณิชย์ Stock System พร้อมใช้งานแล้ว!');
+    setTestMsg(ok ? '✅ ส่งสำเร็จ! ตรวจสอบ LINE ได้เลย' : '⚠️ ส่งแล้ว (LINE Notify อาจใช้เวลาสักครู่)');
+    setTesting(false);
+  };
+
+  const sendAlert = async () => {
+    setTesting(true); setTestMsg('');
+    await sendStockAlert(stock);
+    setTestMsg('✅ ส่งรายงานสต็อกไปยัง LINE แล้ว');
+    setTesting(false);
+  };
+
+  const outN = PR.filter(p=>(stock[p[0]]?.qty||0)===0).length;
+  const lowN = PR.filter(p=>{const d=stock[p[0]]||{qty:0,safety:10};return d.qty>0&&d.qty<=d.safety;}).length;
+
+  return (
+    <div style={S.card}>
+      <div style={S.cardTitle}>🔔 แจ้งเตือนสต็อกผ่าน LINE Notify</div>
+
+      {/* Status */}
+      <div style={{display:'flex',gap:10,marginBottom:14}}>
+        <div style={{...S.kcard,flex:1,background:outN>0?T.redLight:T.greenLight}}>
+          <div style={{fontSize:11,color:T.textMuted}}>❌ หมดสต็อก</div>
+          <div style={{fontSize:20,fontWeight:700,color:outN>0?T.red:T.green}}>{outN} รายการ</div>
+        </div>
+        <div style={{...S.kcard,flex:1,background:lowN>0?T.amberLight:T.greenLight}}>
+          <div style={{fontSize:11,color:T.textMuted}}>⚠️ ใกล้หมด</div>
+          <div style={{fontSize:20,fontWeight:700,color:lowN>0?T.amber:T.green}}>{lowN} รายการ</div>
+        </div>
+      </div>
+
+      {/* Token input */}
+      <div style={{marginBottom:10}}>
+        <div style={{fontSize:12,color:T.textMuted,marginBottom:4}}>
+          LINE Notify Token
+          {saved && <span style={{marginLeft:8,color:T.green,fontSize:11}}>✅ บันทึกแล้ว</span>}
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <input type="password" style={{...S.inp,flex:1}} placeholder="เช่น abc123xyz..."
+            value={token} onChange={e=>setToken(e.target.value)}/>
+          <button style={btn('dk')} onClick={saveToken}>บันทึก</button>
+        </div>
+      </div>
+
+      {/* How to get token */}
+      <div style={{background:T.blueLight,borderRadius:T.radius,padding:'12px 14px',marginBottom:12,fontSize:12,color:T.blue,lineHeight:1.8}}>
+        <b>วิธีรับ LINE Notify Token:</b><br/>
+        1. เปิด <b>line.me/th/notify</b> → Login ด้วย LINE<br/>
+        2. กด <b>"Generate token"</b> → ตั้งชื่อ → เลือก group LINE ที่ต้องการรับแจ้งเตือน<br/>
+        3. Copy token มาวางช่องด้านบน → กด บันทึก<br/>
+        4. กด <b>ทดสอบส่ง</b> เพื่อยืนยันว่าใช้งานได้
+      </div>
+
+      {/* Action buttons */}
+      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+        <button style={btn('gr')} onClick={testNotify} disabled={testing||!saved}>
+          {testing?'กำลังส่ง...':'📤 ทดสอบส่ง'}
+        </button>
+        <button style={btn('am')} onClick={sendAlert} disabled={testing||!saved||(!outN&&!lowN)}>
+          {testing?'กำลังส่ง...':'🔔 ส่งรายงานสต็อกตอนนี้'}
+        </button>
+      </div>
+
+      {testMsg&&<div style={{marginTop:10,padding:'8px 12px',borderRadius:T.radius,fontSize:12,
+        background:testMsg.startsWith('✅')?T.greenLight:testMsg.startsWith('⚠️')?T.amberLight:T.redLight,
+        color:testMsg.startsWith('✅')?T.green:testMsg.startsWith('⚠️')?T.amber:T.red,fontWeight:500}}>
+        {testMsg}
+      </div>}
+
+      <div style={{marginTop:10,fontSize:11,color:T.textMuted,lineHeight:1.7}}>
+        💡 Token จะถูกเก็บไว้ในเบราว์เซอร์ของอุปกรณ์นี้เท่านั้น<br/>
+        แต่ละเครื่องต้องตั้งค่า Token แยกกัน หรือจะฝาก Admin ส่งแจ้งเตือนแทนก็ได้
+      </div>
+    </div>
+  );
+}
+
+
 function StockPage({stock,setStock,profile}){
   const [kw,setKw]=useState('');const [cat,setCat]=useState('ทั้งหมด');const [stF,setStF]=useState('ทั้งหมด');
   const [edits,setEdits]=useState({});const [saving,setSaving]=useState(false);const [msg,setMsg]=useState('');
@@ -291,6 +454,8 @@ function StockPage({stock,setStock,profile}){
     if(error){setMsg('❌ '+error.message);setSaving(false);return;}
     const ns={...stock};updates.forEach(u=>{ns[u.sku]={qty:u.qty,safety:u.safety,cost:u.cost};});
     setStock(ns);setEdits({});setMsg('✅ บันทึก '+updates.length+' รายการ');setSaving(false);
+    // ส่งแจ้งเตือน LINE ถ้ามีสต็อกต่ำ
+    sendStockAlert(ns);
   };
 
   // Export stock count template
@@ -380,6 +545,9 @@ function StockPage({stock,setStock,profile}){
           </div>
         </div>
       </div>
+
+      {/* LINE Notify */}
+      <LineNotifySettings stock={stock}/>
 
       {/* Filter bar */}
       <div style={S.card}>
@@ -1165,6 +1333,70 @@ function ReportPage({stock,sales}){
           </tbody>
         </table></div>
       </div>
+
+      {/* Comparison — this period vs previous */}
+      {(()=>{
+        // หาช่วงก่อนหน้าที่มีความยาวเท่ากัน
+        const now2 = new Date();
+        let prevStart, prevEnd, curStart;
+        if(period==='today'){
+          curStart = new Date(now2.getFullYear(),now2.getMonth(),now2.getDate());
+          prevStart = new Date(curStart); prevStart.setDate(prevStart.getDate()-1);
+          prevEnd   = new Date(curStart);
+        } else if(period==='this_week'){
+          curStart = new Date(now2); curStart.setDate(now2.getDate()-now2.getDay());
+          prevStart = new Date(curStart); prevStart.setDate(prevStart.getDate()-7);
+          prevEnd   = new Date(curStart);
+        } else if(period==='this_month'||period==='month_pick'){
+          const [y,m] = period==='month_pick'?quickMonth.split('-'):[now2.getFullYear(),now2.getMonth()+1];
+          curStart  = new Date(parseInt(y),parseInt(m)-1,1);
+          prevStart = new Date(parseInt(y),parseInt(m)-2,1);
+          prevEnd   = new Date(parseInt(y),parseInt(m)-1,0);
+        } else if(period==='this_year'||period==='year_pick'){
+          const y = period==='year_pick'?parseInt(quickYear):now2.getFullYear();
+          curStart  = new Date(y,0,1);
+          prevStart = new Date(y-1,0,1);
+          prevEnd   = new Date(y-1,11,31);
+        } else return null;
+
+        const prevSales = sales.filter(s=>{const d=new Date(s.date);return d>=prevStart&&d<(prevEnd||curStart);});
+        const prevRev   = prevSales.reduce((s,t)=>s+(t.total_after_vat||t.total||0),0);
+        const prevCost  = prevSales.reduce((s,t)=>s+t.items.reduce((a,b)=>a+(b.cost||0)*b.qty,0),0);
+        const prevProfit= prevRev-prevCost;
+        if(prevRev===0&&revenue===0) return null;
+
+        const diff = (cur,prev) => prev===0 ? null : ((cur-prev)/prev*100);
+        const arrow = (cur,prev) => {
+          const d = diff(cur,prev);
+          if(d===null) return {icon:'',color:T.textMuted};
+          return d>0?{icon:'▲ +'+d.toFixed(1)+'%',color:T.green}:d<0?{icon:'▼ '+d.toFixed(1)+'%',color:T.red}:{icon:'━ 0%',color:T.textMuted};
+        };
+
+        const periodLabel2 = period==='today'?'เมื่อวาน':period==='this_week'?'สัปดาห์ที่แล้ว':period==='this_month'||period==='month_pick'?'เดือนที่แล้ว':'ปีที่แล้ว';
+
+        return(
+          <div style={S.card}>
+            <div style={S.cardTitle}>📊 เปรียบเทียบกับ{periodLabel2}</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:10}}>
+              {[
+                ['ยอดขาย',revenue,prevRev],
+                ['ต้นทุน',cost,prevCost],
+                ['กำไร',profit,prevProfit],
+              ].map(([l,cur,prev],i)=>{
+                const a=arrow(cur,prev);
+                return(
+                  <div key={i} style={{...S.kcard,background:i===2?(cur>=0?T.greenLight:T.redLight):T.grayLight}}>
+                    <div style={{fontSize:11,color:T.textMuted,marginBottom:2}}>{l}</div>
+                    <div style={{fontSize:17,fontWeight:700,color:i===2?(cur>=0?T.green:T.red):T.dark}}>฿{fmt(cur)}</div>
+                    <div style={{fontSize:11,color:T.textMuted}}>ช่วงก่อน: ฿{fmt(prev)}</div>
+                    <div style={{fontSize:12,fontWeight:600,color:a.color,marginTop:2}}>{a.icon||'—'}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Top products */}
       {topItems.length>0&&(
