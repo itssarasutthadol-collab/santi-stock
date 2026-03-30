@@ -1,11 +1,20 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from './supabase';
 
-const PR = [["PD-100002","9 September 500g.","Espresso",360.0,209.73],["PD-100003","9 September 1 kg.","Espresso",720.0,419.46],["PD-100004","Asian Blend 250g.","Espresso",240.0,107.44],["PD-100005","Asian Blend 500g.","Espresso",340.0,230.83],["PD-100006","Asian Blend 1 kg.","Espresso",680.0,461.65],["PD-100007","Brazil 222 250g.","Espresso",240.0,103.45],["PD-100008","Brazil 222 500g.","Espresso",390.0,222.86],["PD-100009","Brazil 222 1 kg.","Espresso",780.0,445.71],["PD-100010","Brazil Santos M 200g","Espresso",240.0,103.45],["PD-100011","Brazil Santos M 500g","Espresso",375.0,222.86],["PD-100012","Brazil Santos M 1kg.","Espresso",750.0,445.71],["PD-100013","Brazil Santos MD200g","Espresso",240.0,103.45],["PD-100014","Brazil Santos MD500g","Espresso",375.0,222.86],["PD-100015","Brazil Santos MD1kg.","Espresso",750.0,445.71],["PD-100016","Brazilian 250g.","Espresso",240.0,103.45],["PD-100017","Brazilian 500g.","Espresso",390.0,222.86],["PD-100018","Brazilian 1 kg.","Espresso",780.0,445.71],["PD-100019","Caramelized 250g.","Espresso",245.0,96.89],["PD-100020","Caramelized 500g.","Espresso",360.0,209.73],["PD-100021","Caramelized 1 kg.","Espresso",720.0,419.46],["PD-100022","Colombia SPM(M)200g.","Espresso",320.0,125.33],["PD-100023","Colombia SPM(M)500g.","Espresso",475.0,266.61],["PD-100024","Colombia SPM(M)1 kg.","Espresso",950.0,533.21],["PD-100025","Colombia SPM(MD)200g","Espresso",320.0,125.33],["PD-100026","Colombia SPM(MD)500g","Espresso",475.0,266.61],["PD-100027","Colombia SPM(MD)1 kg","Espresso",950.0,533.21],["PD-100028","Fighter 222 250g.","Espresso",210.0,91.58],["PD-100029","Fighter 222 500g.","Espresso",300.0,199.11],["PD-100030","Fighter 222 1 kg.","Espresso",600.0,398.21],["PD-100031","Fighter 228 250g.","Espresso",210.0,91.58],["PD-100032","Fighter 228 500g.","Espresso",300.0,199.11],["PD-100033","Fighter 228 1 kg.","Espresso",600.0,398.21],["PD-100034","Fighter 237 250g.","Espresso",210.0,91.58],["PD-100035","Fighter 237 500g.","Espresso",300.0,199.11],["PD-100036","Fighter 237 1 kg.","Espresso",600.0,398.21],["PD-100037","Full Moon 250g.","Espresso",320.0,113.92],["PD-100038","Full Moon 500g.","Espresso",450.0,236.8],["PD-100039","Full Moon 1 kg.","Espresso",900.0,473.59],["PD-100040","HB Fluffy 250g.","Espresso",310.0,121.03],["PD-100041","HB Fluffy 500g.","Espresso",485.0,258.01],["PD-100042","HB Fluffy 1 kg.","Espresso",970.0,516.02],["PD-100043","HB Jennie 250g.","Espresso",390.0,142.91],["PD-100044","HB Jennie 500g.","Espresso",600.0,301.76],["PD-100045","HB Jennie 1 kg.","Espresso",1200.0,603.52],["PD-100046","KTT 250g.","Espresso",325.0,105.95],["PD-100047","KTT 500g.","Espresso",450.0,227.86],["PD-100048","KTT 1 kg.","Espresso",900.0,455.71],["PD-100049","Lao 222 250g.","Espresso",220.0,98.77],["PD-100050","Lao 222 500g.","Espresso",350.0,213.48],["PD-100051","Lao 222 1 kg.","Espresso",700.0,426.96],["PD-100052","Lao 228 250g.","Espresso",220.0,98.77],["PD-100053","Lao 228 500g.","Espresso",350.0,213.48],["PD-100054","Lao 228 1 kg.","Espresso",700.0,426.96],["PD-100055","Lao 233 250g.","Espresso",220.0,98.77],["PD-100056","Lao 233 500g.","Espresso",350.0,213.48],["PD-100057","Lao 233 1 kg.","Espresso",700.0,426.96],["PD-100058","MBY (Yor-Chue) 250g.","Espresso",270.0,102.44],["PD-100059","MBY (Yor-Chue) 500g.","Espresso",375.0,220.83],["PD-100060","MBY (Yor-Chue) 1 kg.","Espresso",750.0,441.65],["PD-100061","MBY (Yor-Ta) 250g.","Espresso",270.0,102.44],["PD-100062","MBY (Yor-Ta) 500g.","Espresso",375.0,220.83],["PD-100063","MBY (Yor-Ta) 1 kg.","Espresso",750.0,441.65],["PD-100064","MBY 3 King 250g.","Espresso",330.0,111.27],["PD-100065","MBY 3 King 500g.","Espresso",450.0,238.48],["PD-100066","MBY 3 King 1 kg.","Espresso",900.0,476.96],["PD-100067","Milk Choc 250g.","Espresso",260.0,105.64],["PD-100068","Milk Choc 500g.","Espresso",375.0,227.23],["PD-100069","Milk Choc 1 kg.","Espresso",750.0,454.46],["PD-100070","Milk's Father 250g.","Espresso",290.0,105.02],["PD-100071","Milk's Father 500g.","Espresso",425.0,225.98],["PD-100072","Milk's Father 1 kg.","Espresso",850.0,451.96],["PD-100073","Omkoi Washเข้ม 250g.","Espresso",370.0,119.08],["PD-100074","Omkoi Washเข้ม 500g.","Espresso",495.0,254.11],["PD-100075","Omkoi Washเข้ม 1 kg.","Espresso",990.0,508.21],["PD-100076","Omkoi Washกลาง 250g.","Espresso",370.0,119.08],["PD-100077","Omkoi Washกลาง 500g.","Espresso",495.0,254.11],["PD-100078","Omkoi Washกลาง 1kg.","Espresso",990.0,508.21],["PD-100079","Peanut Butter 250g.","Espresso",310.0,120.33],["PD-100080","Peanut Butter 500g.","Espresso",485.0,256.61],["PD-100081","Peanut Butter 1 kg.","Espresso",970.0,513.21],["PD-100082","Sammuen MD 250g.","Espresso",350.0,115.95],["PD-100083","Sammuen MD 500g.","Espresso",450.0,247.86],["PD-100084","Sammuen MD 1 kg.","Espresso",900.0,495.71],["PD-100085","Sammuen Medium 250g.","Espresso",350.0,115.95],["PD-100086","Sammuen Medium 500g.","Espresso",450.0,247.86],["PD-100087","Sammuen Medium 1 kg.","Espresso",900.0,495.71],["PD-100088","Spartan 222 250g.","Espresso",210.0,99.08],["PD-100089","Spartan 222 500g.","Espresso",300.0,214.11],["PD-100090","Spartan 222 1 kg.","Espresso",600.0,428.21],["PD-100091","Spartan 228 250g.","Espresso",210.0,99.08],["PD-100092","Spartan 228 500g.","Espresso",300.0,214.11],["PD-100093","Spartan 228 1 kg.","Espresso",600.0,428.21],["PD-100094","Spartan 233 250g.","Espresso",210.0,99.08],["PD-100095","Spartan 233 500g.","Espresso",300.0,214.11],["PD-100096","Spartan 233 1 kg.","Espresso",600.0,428.21],["PD-100097","The Slowly 216 250g.","Espresso",230.0,105.64],["PD-100098","The Slowly 216 500g.","Espresso",350.0,227.23],["PD-100099","The Slowly 216 1 kg.","Espresso",700.0,454.46],["PD-100100","The Slowly 222 250g.","Espresso",230.0,105.64],["PD-100101","The Slowly 222 500g.","Espresso",350.0,227.23],["PD-100102","The Slowly 222 1 kg.","Espresso",700.0,454.46],["PD-100103","The Slowly 228 250g.","Espresso",230.0,105.64],["PD-100104","The Slowly 228 500g.","Espresso",350.0,227.23],["PD-100105","The Slowly 228 1 kg.","Espresso",700.0,454.46],["PD-100106","ดอยช้าง212 250g.","Espresso",290.0,106.58],["PD-100107","ดอยช้าง212 500g.","Espresso",370.0,229.11],["PD-100108","ดอยช้าง212 1 kg.","Espresso",740.0,458.21],["PD-100109","ดอยช้าง222 250g.","Espresso",290.0,106.58],["PD-100110","ดอยช้าง222 500g.","Espresso",370.0,229.11],["PD-100111","ดอยช้าง222 1 kg.","Espresso",740.0,458.21],["PD-100112","ดอยช้าง228 250g.","Espresso",290.0,106.58],["PD-100113","ดอยช้าง228 500g.","Espresso",370.0,229.11],["PD-100114","ดอยช้าง228 1 kg.","Espresso",740.0,458.21],["PD-100115","สู่สุขคติ 237 250g.","Espresso",210.0,82.2],["PD-100116","สู่สุขคติ 237 500g.","Espresso",300.0,180.36],["PD-100117","สู่สุขคติ 237 1 kg.","Espresso",600.0,360.71],["PD-100118","Colombia Chiroso100g","Filter",500.0,176.52],["PD-100119","Colombia Chiroso200g","Filter",990.0,344.89],["PD-100120","Sammuen Washed 200g.","Filter",300.0,56.27],["PD-100121","MBY Fully Washed200g","Filter",320.0,104.39],["PD-100122","MBY Honey 200g.","Filter",335.0,105.64],["PD-100123","MBY Natural 200g.","Filter",420.0,105.64],["PD-100124","ภูฟ้า Natural 200g.","Filter",220.0,74.39],["PD-100125","Omkoiโฆ๊ะผะโด๊ะ 200g","Filter",275.0,106.89],["PD-100126","Omkoi Honey 200g.","Filter",290.0,111.89],["PD-100127","Omkoi Red Honey 200g","Filter",325.0,126.89],["PD-100128","Omkoi Wased 200g.","Filter",275.0,106.89],["PD-100129","Hojicha 50g.","Non-Coffee",160.0,82.3],["PD-100130","Hojicha 100g.","Non-Coffee",290.0,159.4],["PD-100131","Hojicha 200g.","Non-Coffee",570.0,313.59],["PD-100132","Hojicha 500g.","Non-Coffee",1300.0,780.55],["PD-100133","Kyoto 50g.","Non-Coffee",260.0,93.54],["PD-100134","Kyoto 100g.","Non-Coffee",490.0,181.89],["PD-100135","Kyoto 200g.","Non-Coffee",950.0,358.59],["PD-100136","Kyoto 500g.","Non-Coffee",2300.0,893.05],["PD-100137","Kyoto 1kg.","Non-Coffee",4600.0,1767.0],["PD-100138","Shizuoka 50g.","Non-Coffee",260.0,92.05],["PD-100139","Shizuoka 100g.","Non-Coffee",490.0,184.1],["PD-100140","Shizuoka 200g.","Non-Coffee",950.0,372.83],["PD-100141","Shizuoka 500g.","Non-Coffee",2300.0,929.49],["PD-100142","Shizuoka 1kg.","Non-Coffee",4600.0,1841.0],["PD-100143","แบล็คโกโก้ 200g.","Non-Coffee",155.0,86.53],["PD-100144","แบล็คโกโก้ 500g.","Non-Coffee",330.0,213.73],["PD-100145","แบล็คโกโก้ 1kg.","Non-Coffee",660.0,409.48],["PD-100146","โกโก้สูตร1 200g.","Non-Coffee",160.0,104.83],["PD-100147","โกโก้สูตร1 500g.","Non-Coffee",350.0,259.49],["PD-100148","โกโก้สูตร1 1kg.","Non-Coffee",700.0,501.0],["PD-100149","โกโก้สูตร2 200g.","Non-Coffee",165.0,107.61],["PD-100150","โกโก้สูตร2 500g.","Non-Coffee",355.0,266.44],["PD-100151","โกโก้สูตร2 1kg.","Non-Coffee",710.0,514.9],["PD-100152","โกโก้สูตร3 200g.","Non-Coffee",150.0,70.23],["PD-100153","โกโก้สูตร3 500g.","Non-Coffee",315.0,172.99],["PD-100154","โกโก้สูตร3 1kg.","Non-Coffee",630.0,328.0],["PD-100155","โกโก้สูตร4 200g.","Non-Coffee",120.0,57.23],["PD-100156","โกโก้สูตร4 500g.","Non-Coffee",245.0,140.49],["PD-100157","โกโก้สูตร4 1kg.","Non-Coffee",490.0,263.0],["PD-100158","โกโก้สูตร5 200g.","Non-Coffee",155.0,98.63],["PD-100159","โกโก้สูตร5 500g.","Non-Coffee",335.0,243.99],["PD-100160","โกโก้สูตร5 1kg.","Non-Coffee",670.0,470.0],["PD-100161","ชาเขียวมะลิใส 100g.","Non-Coffee",150.0,54.5],["PD-100162","ชาเขียวมะลิใส 500g.","Non-Coffee",275.0,155.0],["PD-100163","ชาเขียวมะลินม 200g.","Non-Coffee",110.0,56.27],["PD-100164","ชาเขียวมะลินม 500g.","Non-Coffee",225.0,138.09],["PD-100165","ชาเขียวมะลินม 1 kg.","Non-Coffee",450.0,258.2],["PD-100166","ชาไทย(1) 200g.","Non-Coffee",100.0,33.63],["PD-100167","ชาไทย(1) 500g.","Non-Coffee",200.0,81.49],["PD-100168","ชาไทย(1) 1kg.","Non-Coffee",400.0,145.0],["PD-100169","ชาไทย(2) 200g.","Non-Coffee",100.0,38.94],["PD-100170","ชาไทย(2) 500g.","Non-Coffee",200.0,94.77],["PD-100171","ชาไทย(2) 1kg.","Non-Coffee",400.0,171.56],["PD-100172","ชาดำอัสสัม 200g.","Non-Coffee",165.0,58.63],["PD-100173","ชาดำอัสสัม 500g.","Non-Coffee",225.0,143.99],["PD-100174","ชาบาบูตง200gสูตรใหม่","Non-Coffee",80.0,24.94],["PD-100175","ชาบาบูตง500gสูตรเก่า","Non-Coffee",140.0,66.77],["PD-100176","ชาบาบูตง500gสูตรใหม่","Non-Coffee",140.0,59.77],["PD-100177","ชาบาบูตง1kg.สูตรเก่า","Non-Coffee",280.0,115.56],["PD-100178","ชาบาบูตง1kg.สูตรใหม่","Non-Coffee",280.0,101.56],["PD-100179","ชามะนาว3in1 500g.","Non-Coffee",140.0,66.77],["PD-100180","ชามะนาว3in1 1 kg.","Non-Coffee",240.0,115.56],["PD-100181","ชาอินโดOriginal500g.","Non-Coffee",110.0,47.77],["PD-100182","ชาอินโดOriginal1kg.","Non-Coffee",220.0,77.56],["PD-100183","ชาอินโดPremium 500g.","Non-Coffee",140.0,66.77],["PD-100184","ชาอินโดPremium1kg.","Non-Coffee",280.0,115.56],["PD-100185","GBสามหมื่นNatural1kg","Green Bean",430.0,347.15],["PD-100186","GB Brazil Cerrado1kg","Green Bean",420.0,307.15],["PD-100187","GB Brazil santos 1kg","Green Bean",420.0,307.15],["PD-100188","GB ปางขอน Fully 2","Green Bean",430.0,242.15],["PD-100189","GB ปางขอน Fully1","Green Bean",430.0,242.15],["PD-100190","GB ปางขอน Honey 1kg.","Green Bean",405.0,312.153],["PD-100191","GBปางขอนNatura 1kg.","Green Bean",450.0,352.15],["PD-100192","GB Omkoi Honey 1 kg.","Green Bean",470.0,377.15],["PD-100193","GB Omkoi RedHoney1kg","Green Bean",535.0,437.15],["PD-100194","GB Omkoi Wash 1 kg.","Green Bean",440.0,357.15],["PD-100195","GB OmkoiWashโฆ๊ะ 1kg","Green Bean",440.0,357.15],["PD-100196","GB สามหมื่น Peaberry","Green Bean",430.0,347.15],["PD-100197","GB สามหมื่น Wash (A)","Green Bean",430.0,347.15],["PD-100198","GB สามหมื่น Wash (B)","Green Bean",430.0,347.15],["PD-100199","Dripbag Setกาแฟ(ถุง)","Dripbag Coffee",350.0,125.5],["PD-100200","Dripbag 3 King","Dripbag Coffee",40.0,10.54],["PD-100201","Dripbag Fighter237","Dripbag Coffee",40.0,9.61],["PD-100202","Dripbag KTT Blend","Dripbag Coffee",40.0,11.28],["PD-100203","Dripbag Lao 228","Dripbag Coffee",40.0,9.58],["PD-100204","Dripbag MBY Honey","Dripbag Coffee",40.0,10.79],["PD-100205","Dripbag MBY Natural","Dripbag Coffee",40.0,11.19],["PD-100206","Dripbag MBY Washed","Dripbag Coffee",40.0,10.01],["PD-100207","Dripbag Milk Choc","Dripbag Coffee",40.0,10.09],["PD-100208","Dripbag Slowly222","Dripbag Coffee",40.0,9.93],["PD-100209","Dripbag Spartan222","Dripbag Coffee",40.0,9.56],["PD-100210","Dripbag Spartan228","Dripbag Coffee",40.0,9.58],["PD-100211","Dripbag ภูฟ้า","Dripbag Coffee",40.0,9.78],["PD-100212","Dripbag สู่สุขคติ237","Dripbag Coffee",40.0,9.51],["PD-100213","Dripbag อมก๋อย Wash","Dripbag Coffee",40.0,11.24],["PD-100214","DripbagBYBerryVillag","Dripbag Coffee",40.0,11.75],["PD-100215","ชะลอมหูหิ้วกาแฟ10ซอง","Dripbag Coffee",450.0,142.5],["PD-100216","Dripbag Set ชา(ถุง)","Dripbag Non Coffee",270.0,76.5],["PD-100217","Dripbag ชา 3ช่า","Dripbag Non Coffee",30.0,5.99],["PD-100218","Dripbag ชาไทย สูตร1","Dripbag Non Coffee",30.0,6.76],["PD-100219","Dripbag ชาไทย สูตร2","Dripbag Non Coffee",30.0,7.12],["PD-100220","Dripbag ชาดำ","Dripbag Non Coffee",30.0,7.25],["PD-100221","Dripbagชาเขียวมะลิใส","Dripbag Non Coffee",30.0,6.1],["PD-100222","Dripbagชาเขียวมะลินม","Dripbag Non Coffee",30.0,7.0],["PD-100223","ชะลอมตลับชา 10ซอง","Dripbag Non Coffee",350.0,97.5],["PD-100224","Capsule KTT Blend","Capsules Coffee",248.0,137.08],["PD-100225","Capsule Lao228","Capsules Coffee",248.0,65.95],["PD-100226","Capsule MBY Yor-Chue","Capsules Coffee",248.0,136.23],["PD-100227","Capsule Milk'sFather","Capsules Coffee",248.0,136.85],["PD-100228","Capsule SET (รวมรส)","Capsules Coffee",248.0,137.08],["PD-100229","Capsule Slowly222","Capsules Coffee",248.0,137.0],["PD-100230","Capsule Spartan222","Capsules Coffee",248.0,66.03],["PD-100231","Capsule ภูฟ้า Natura","Capsules Coffee",248.0,61.08],["PD-100232","Capsule อมก๋อย Wash","Capsules Coffee",248.0,70.83],["PD-100233","SET30Cap KTT Blend","Capsules Coffee",660.0,387.97],["PD-100234","SET30Cap Milk's Fath","Capsules Coffee",660.0,387.29],["PD-100235","SET30Cap The Slowly","Capsules Coffee",660.0,387.74],["PD-100236","SET30Cap Yor-Chue","Capsules Coffee",660.0,385.43],["PD-100237","50Cap(2รสชาติ)ทักแชท","Capsules Coffee",999.0,638.38],["PD-100238","Capsules ชาเขียวมะลิ","Capsules Non-Coffee",148.0,51.2],["PD-100239","Capsules ชาไทย","Capsules Non-Coffee",148.0,47.0],["PD-100240","Capsules ชาดำ","Capsules Non-Coffee",148.0,52.0],["PD-100241","Capsules ชาพีช","Capsules Non-Coffee",148.0,55.2],["PD-100242","Capsules มัทฉะ","Capsules Non-Coffee",148.0,58.9],["PD-100243","พร้อมดื่มLight Fruit","Cold Brew",70.0,20.08],["PD-100244","Light Fruit 200ml","Cold Brew",100.0,20.05],["PD-100245","Light Fruit 500ml","Cold Brew",150.0,53.49],["PD-100246","Light Fruit 1000ml.","Cold Brew",250.0,96.29],["PD-100247","Light Fruit 5000ml","Cold Brew",850.0,434.39],["PD-100248","พร้อมดื่มMedium Choc","Cold Brew",70.0,21.38],["PD-100249","Medium Choc 200ml","Cold Brew",100.0,21.34],["PD-100250","Medium Choc 500ml","Cold Brew",150.0,56.73],["PD-100251","Medium Choc 1000ml.","Cold Brew",250.0,102.76],["PD-100252","Medium Choc 5000ml","Cold Brew",850.0,466.71],["PD-100253","พร้อมดื่มDark Choc","Cold Brew",70.0,22.62],["PD-100254","Dark Choc 200ml","Cold Brew",100.0,22.59],["PD-100255","Dark Choc 500ml","Cold Brew",150.0,59.84],["PD-100256","Dark Choc 1000ml.","Cold Brew",250.0,108.99],["PD-100257","Dark Choc 5000ml","Cold Brew",850.0,497.89],["PD-100258","พร้อมดื่มFloral","Cold Brew",70.0,20.3],["PD-100259","Floral 200ml.","Cold Brew",100.0,20.27],["PD-100260","Floral 500ml","Cold Brew",150.0,54.03],["PD-100261","Floral 1000ml.","Cold Brew",250.0,97.37],["PD-100262","พร้อมดื่มHoneyLemon","Cold Brew",70.0,26.3],["PD-100263","Honey Lemon 200ml","Cold Brew",100.0,26.27],["PD-100264","Honey Lemon 500ml","Cold Brew",220.0,69.03],["PD-100265","Honey Lemon 1000ml.","Cold Brew",330.0,127.37],["PD-100266","พร้อมดื่มBerry","Cold Brew",70.0,20.89],["PD-100267","Berry Forest 200ml","Cold Brew",100.0,20.86],["PD-100268","Berry Forest 500ml","Cold Brew",220.0,55.52],["PD-100269","Berry Forest 1000ml.","Cold Brew",330.0,100.34],["PD-100270","พร้อมดื่มToffee","Cold Brew",70.0,22.03],["PD-100271","Toffee Caramel 200ml","Cold Brew",100.0,21.99],["PD-100272","Toffee Caramel 500ml","Cold Brew",220.0,58.35],["PD-100273","Toffee Caramel1000ml","Cold Brew",330.0,106.0],["PD-100274","Samui 200ml","Cold Brew",100.0,22.66],["PD-100275","Samui 500ml","Cold Brew",220.0,60.03],["PD-100276","Samui 1000ml.","Cold Brew",330.0,109.36],["PD-100277","Blush Fusion 200ml","Cold Brew",100.0,20.7],["PD-100278","Blush Fusion 500ml","Cold Brew",220.0,55.11],["PD-100279","Blush Fusion 1000ml.","Cold Brew",330.0,99.53],["PD-100280","Tom Yum 200ml","Cold Brew",100.0,24.49],["PD-100281","Tom Yum 500ml","Cold Brew",220.0,64.59],["PD-100282","Tom Yum 1000ml.","Cold Brew",330.0,118.49],["PD-100283","พร้อมดื่มคละรส 7ขวด,กระเป๋าเก็บความเย็น","Cold Brew",490.0,167.84],["PD-100284","Tattoo รวมผี","Free Gift",35.0,14.5],["PD-100285","Roaster,Black ดำ","Coffee Machine",28900.0,0.0],["PD-100286","Roaster,Red แดง","Coffee Machine",28900.0,0.0],["PD-100287","Roaster+Cooling Tray,Black ดำ","Coffee Machine",33000.0,0.0],["PD-100288","Roaster+Cooling Tray,Red แดง","Coffee Machine",33000.0,0.0],["PD-100289","DUOMO สีขาว","Accessories",7400.0,5900.0],["PD-100290","DUOMO สีดำ","Accessories",6100.0,4900.0],["PD-100291","Force Tamper เงินเงา","Accessories",6155.0,4900.0],["PD-100292","Force Tamper เงินแมท","Accessories",6155.0,4900.0],["PD-100293","Force Tamper ลายไม้","Accessories",6155.0,4900.0],["PD-100294","Force Tamper สีดำ","Accessories",6155.0,4900.0],["PD-100295","Force Tamper สีดำเงา","Accessories",6155.0,4900.0],["PD-100296","Light Fruit 1000ml.,พร้อมดื่มLight Fruit","Promotion",251.0,96.41],["PD-100297","Light Fruit 1000ml.,พร้อมดื่มMedium Choc","Promotion",251.0,96.41],["PD-100298","Light Fruit 1000ml.,พร้อมดื่มDark Choc","Promotion",251.0,96.41],["PD-100299","Light Fruit 1000ml.,พร้อมดื่มFloral","Promotion",251.0,96.41],["PD-100300","Light Fruit 1000ml.,พร้อมดื่มHoneyLemon","Promotion",251.0,96.41],["PD-100301","Light Fruit 1000ml.,พร้อมดื่มBerry","Promotion",251.0,96.41],["PD-100302","Light Fruit 1000ml.,พร้อมดื่มToffee","Promotion",251.0,96.41],["PD-100303","Medium Choc 1000ml.,พร้อมดื่มLight Fruit","Promotion",251.0,96.41],["PD-100304","Medium Choc 1000ml.,พร้อมดื่มMedium Choc","Promotion",251.0,96.41],["PD-100305","Medium Choc 1000ml.,พร้อมดื่มDark Choc","Promotion",251.0,96.41],["PD-100306","Medium Choc 1000ml.,พร้อมดื่มFloral","Promotion",251.0,96.41],["PD-100307","Medium Choc 1000ml.,พร้อมดื่มHoneyLemon","Promotion",251.0,96.41],["PD-100308","Medium Choc 1000ml.,พร้อมดื่มBerry","Promotion",251.0,96.41],["PD-100309","Medium Choc 1000ml.,พร้อมดื่มToffee","Promotion",251.0,96.41],["PD-100310","Dark Choc 1000ml.,พร้อมดื่มLight Fruit","Promotion",251.0,96.41],["PD-100311","Dark Choc 1000ml.,พร้อมดื่มMedium Choc","Promotion",251.0,96.41],["PD-100312","Dark Choc 1000ml.,พร้อมดื่มDark Choc","Promotion",251.0,96.41],["PD-100313","Dark Choc 1000ml.,พร้อมดื่มFloral","Promotion",251.0,96.41],["PD-100314","Dark Choc 1000ml.,พร้อมดื่มHoneyLemon","Promotion",251.0,96.41],["PD-100315","Dark Choc 1000ml.,พร้อมดื่มBerry","Promotion",251.0,96.41],["PD-100316","Dark Choc 1000ml.,พร้อมดื่มToffee","Promotion",251.0,96.41],["PD-100317","Floral 1000ml.,พร้อมดื่มLight Fruit","Promotion",251.0,96.41],["PD-100318","Floral 1000ml.,พร้อมดื่มMedium Choc","Promotion",251.0,96.41],["PD-100319","Floral 1000ml.,พร้อมดื่มDark Choc","Promotion",251.0,96.41],["PD-100320","Floral 1000ml.,พร้อมดื่มFloral","Promotion",251.0,96.41],["PD-100321","Floral 1000ml.,พร้อมดื่มHoneyLemon","Promotion",251.0,96.41],["PD-100322","Floral 1000ml.,พร้อมดื่มBerry","Promotion",251.0,96.41],["PD-100323","Floral 1000ml.,พร้อมดื่มToffee","Promotion",251.0,96.41],["PD-100324","Honey Lemon 1000ml.,พร้อมดื่มLight Fruit","Promotion",331.0,129.18],["PD-100325","Honey Lemon 1000ml.,พร้อมดื่มMedium Choc","Promotion",331.0,129.18],["PD-100326","Honey Lemon 1000ml.,พร้อมดื่มDark Choc","Promotion",331.0,129.18],["PD-100327","Honey Lemon 1000ml.,พร้อมดื่มFloral","Promotion",331.0,129.18],["PD-100328","Honey Lemon 1000ml.,พร้อมดื่มHoneyLemon","Promotion",331.0,129.18],["PD-100329","Honey Lemon 1000ml.,พร้อมดื่มBerry","Promotion",331.0,129.18],["PD-100330","Honey Lemon 1000ml.,พร้อมดื่มToffee","Promotion",331.0,129.18],["PD-100331","Berry Forest 1000ml.,พร้อมดื่มLight Fruit","Promotion",331.0,129.18],["PD-100332","Berry Forest 1000ml.,พร้อมดื่มMedium Choc","Promotion",331.0,129.18],["PD-100333","Berry Forest 1000ml.,พร้อมดื่มDark Choc","Promotion",331.0,129.18],["PD-100334","Berry Forest 1000ml.,พร้อมดื่มFloral","Promotion",331.0,129.18],["PD-100335","Berry Forest 1000ml.,พร้อมดื่มHoneyLemon","Promotion",331.0,129.18],["PD-100336","Berry Forest 1000ml.,พร้อมดื่มBerry","Promotion",331.0,129.18],["PD-100337","Berry Forest 1000ml.,พร้อมดื่มToffee","Promotion",331.0,129.18],["PD-100338","Toffee Caramel1000ml,พร้อมดื่มLight Fruit","Promotion",331.0,129.18],["PD-100339","Toffee Caramel1000ml,พร้อมดื่มMedium Choc","Promotion",331.0,129.18],["PD-100340","Toffee Caramel1000ml,พร้อมดื่มDark Choc","Promotion",331.0,129.18],["PD-100341","Toffee Caramel1000ml,พร้อมดื่มFloral","Promotion",331.0,129.18],["PD-100342","Toffee Caramel1000ml,พร้อมดื่มHoneyLemon","Promotion",331.0,129.18],["PD-100343","Toffee Caramel1000ml,พร้อมดื่มBerry","Promotion",331.0,129.18],["PD-100344","Toffee Caramel1000ml,พร้อมดื่มToffee","Promotion",331.0,129.18],["PD-100345","Samui 1000ml.,พร้อมดื่มLight Fruit","Promotion",331.0,129.18],["PD-100346","Samui 1000ml.,พร้อมดื่มMedium Choc","Promotion",331.0,129.18],["PD-100347","Samui 1000ml.,พร้อมดื่มDark Choc","Promotion",331.0,129.18],["PD-100348","Samui 1000ml.,พร้อมดื่มFloral","Promotion",331.0,129.18],["PD-100349","Samui 1000ml.,พร้อมดื่มHoneyLemon","Promotion",331.0,129.18],["PD-100350","Samui 1000ml.,พร้อมดื่มBerry","Promotion",331.0,129.18],["PD-100351","Samui 1000ml.,พร้อมดื่มToffee","Promotion",331.0,129.18],["PD-100352","Blush Fusion 1000ml.,พร้อมดื่มLight Fruit","Promotion",331.0,129.18],["PD-100353","Blush Fusion 1000ml.,พร้อมดื่มMedium Choc","Promotion",331.0,129.18],["PD-100354","Blush Fusion 1000ml.,พร้อมดื่มDark Choc","Promotion",331.0,129.18],["PD-100355","Blush Fusion 1000ml.,พร้อมดื่มFloral","Promotion",331.0,129.18],["PD-100356","Blush Fusion 1000ml.,พร้อมดื่มHoneyLemon","Promotion",331.0,129.18],["PD-100357","Blush Fusion 1000ml.,พร้อมดื่มBerry","Promotion",331.0,129.18],["PD-100358","Blush Fusion 1000ml.,พร้อมดื่มToffee","Promotion",331.0,129.18],["PD-100359","Tom Yum 1000ml.,พร้อมดื่มLight Fruit","Promotion",331.0,129.18],["PD-100360","Tom Yum 1000ml.,พร้อมดื่มMedium Choc","Promotion",331.0,129.18],["PD-100361","Tom Yum 1000ml.,พร้อมดื่มDark Choc","Promotion",331.0,129.18],["PD-100362","Tom Yum 1000ml.,พร้อมดื่มFloral","Promotion",331.0,129.18],["PD-100363","Tom Yum 1000ml.,พร้อมดื่มHoneyLemon","Promotion",331.0,129.18],["PD-100364","Tom Yum 1000ml.,พร้อมดื่มBerry","Promotion",331.0,129.18],["PD-100365","Tom Yum 1000ml.,พร้อมดื่มToffee","Promotion",331.0,129.18],["PD-100366","Medium Roast,30 กรัม","Accessories",415.0,0.0],["PD-100367","Medium Roast,60 กรัม","Accessories",795.0,0.0],["PD-100368","Medium Dark Roast,30 กรัม","Accessories",415.0,0.0],["PD-100369","Medium Dark Roast,60 กรัม","Accessories",795.0,0.0],["PD-100370","กส.รูปเสือ เล็ก","Accessories",150.0,0.0],["PD-100371","กส.กระสอบเปล่า","Accessories",65.0,0.0],["PD-100372","กส.THAI ม่วง","Accessories",250.0,0.0],["PD-100373","กส.ตัวหนังสือ","Accessories",150.0,0.0],["PD-100374","กส.Lao","Accessories",250.0,0.0],["PD-100375","กส.ตัวหนังสือครึ่ง","Accessories",250.0,0.0],["PD-100376","กส.รูปเสือ ใหญ่","Accessories",250.0,0.0],["PD-100377","กส.รูปกบ ใหญ่","Accessories",250.0,0.0],["PD-100378","กส.รูปช้าง","Accessories",120.0,0.0],["PD-100379","กส.รูปม้าลาย","Accessories",150.0,0.0],["PD-100380","ORGM Ceramic ชมพู,M","Accessories",1050.0,873.12],["PD-100381","ORGM Ceramic เหลือง,S","Accessories",980.0,864.25],["PD-100382","ORGMCeramicMattGreen,M","Accessories",1050.0,873.12],["PD-100383","ORGM Ceramic ดำ,S","Accessories",980.0,864.25],["PD-100384","ORGM Ceramic Navy,S","Accessories",980.0,864.25],["PD-100385","ORGMCeramicMattBeige,S","Accessories",980.0,864.25],["PD-100386","ORGM Ceramic เขียว,S","Accessories",980.0,864.25],["PD-100387","ORGMCeramic White,M","Accessories",1050.0,873.12],["PD-100388","ORGM Ceramic ม่วง,M","Accessories",1050.0,873.12],["PD-100389","ORGM Ceramic Navy,M","Accessories",1050.0,873.12],["PD-100390","ORGMCeramicMatt Pink,M","Accessories",1050.0,873.12],["PD-100391","ORGM Ceramic ส้ม,M","Accessories",1050.0,873.12],["PD-100392","ORGMCeramicMattGrey,M","Accessories",1050.0,873.12],["PD-100393","ORGM Ceramic แดง,S","Accessories",980.0,864.25],["PD-100394","ORGMCeramicMatt Blue,M","Accessories",1050.0,873.12],["PD-100395","ORGM Ceramic น้ำตาล,S","Accessories",980.0,864.25],["PD-100396","ORGM Ceramic เหลือง,M","Accessories",1050.0,873.12],["PD-100397","ORGMCeramicMattGrey,S","Accessories",980.0,864.25],["PD-100398","ORGMCeramicMatt Blue,S","Accessories",980.0,864.25],["PD-100399","ORGM Ceramic เขียว,M","Accessories",1050.0,873.12],["PD-100400","ORGM Ceramic ม่วง,S","Accessories",980.0,864.25],["PD-100401","ORGM Ceramic ส้ม,S","Accessories",980.0,864.25],["PD-100402","ORGM Ceramic น้ำตาล,M","Accessories",1050.0,873.12],["PD-100403","ORGMCeramicMattGreen,S","Accessories",980.0,864.25],["PD-100404","ORGM Ceramic แดง,M","Accessories",1050.0,873.12],["PD-100405","ORGM Ceramic ชมพู,S","Accessories",980.0,864.25],["PD-100406","ORGM Ceramic ฟ้าคราม,M","Accessories",1050.0,873.12],["PD-100407","ORGM Ceramic ฟ้าคราม,S","Accessories",980.0,864.25],["PD-100408","ORGMCeramicMattBeige,M","Accessories",1050.0,873.12],["PD-100409","ORGM Ceramic ดำ,M","Accessories",1050.0,873.12],["PD-100410","ORGMCeramic White,S","Accessories",980.0,864.25],["PD-100411","ORGMCeramicMatt Pink,S","Accessories",980.0,864.25],["PD-100412","BY Berry Village200g","Accessories",790.0,118.14],["PD-100413","FelicitaParallelPlus","Accessories",3900.0,2700.0],["PD-100414","ฐาน Ripple 58.35 mm.","Accessories",810.0,500.0],["PD-100415","ฐาน Flat 58.50 mm.","Accessories",810.0,500.0],["PD-100416","ฐาน Waffle 58.50 mm.","Accessories",1070.0,750.0],["PD-100417","ฐาน Waffle 58.35 mm.","Accessories",1070.0,750.0],["PD-100418","ฐาน Ripple 58.50 mm.","Accessories",810.0,500.0],["PD-100419","CAFEC T-92 4CUP","Accessories",180.0,115.0],["PD-100420","CAFEC T-92 1CUP","Accessories",160.0,105.0],["PD-100421","CAFEC T-83 4CUP","Accessories",180.0,115.5],["PD-100422","CAFEC T-83 1CUP","Accessories",160.0,105.0],["PD-100423","CAFEC T-90 4CUP","Accessories",180.0,115.5],["PD-100424","CAFEC T-90 1CUP","Accessories",160.0,105.0],["PD-100425","ยางซิลิโคน สีเขียว","Accessories",740.0,385.0],["PD-100426","ยางซิลิโคน สีชมพู","Accessories",740.0,385.0],["PD-100427","ยางซิลิโคน สีดำ","Accessories",740.0,385.0],["PD-100428","ยางซิลิโคน สีเหลือง","Accessories",740.0,385.0],["PD-100429","Dripper ใส 1CUP","Accessories",280.0,225.0],["PD-100430","Dripper ใส 4CUP","Accessories",320.0,250.0],["PD-100431","แก้วตวง","Free Gift",0.0,3.81],["PD-100432","ถุงเก็บความเย็น","Free Gift",0.0,11.77],["PD-100433","Maejantai 100g.","Filter",400.0,177.27],["PD-100434","Maejantai 200g.","Filter",780.0,346.39],["PD-100435","Panama Geisha 50g.","Filter",700.0,330.87],["PD-100436","Panama Geisha 100g.","Filter",1250.0,650.64],["PD-100437","Panama Geisha 200g.","Filter",2400.0,1293.14],["PD-100438","ช้อนตวง ตักกาแฟแบบ 2 in 1","Accessories",35.0,0.0],["PD-100439","เครื่องแคปซูล (ขาว)","Accessories",2500.0,1878.24],["PD-100440","FelicitaParalleScale","Accessories",3400.0,2200.0],["PD-100441","Felicita Oval Black","Accessories",14900.0,9500.0],["PD-100442","Felicita Oval White","Accessories",14900.0,9500.0],["PD-100443","Arco 2in1 Grinder","Accessories",19900.0,12000.0],["PD-100444","Arco Hand Grinder","Accessories",8900.0,6000.0],["PD-100445","Grinder Clean 450g.","Accessories",1460.0,976.5],["PD-100446","FLAT FAST M 50 แผ่น","Accessories",970.0,648.78],["PD-100447","FLAT FAST M 100 แผ่น","Accessories",1620.0,1077.32],["PD-100448","FLAT FAST M 25 แผ่น","Accessories",640.0,426.83],["PD-100449","CONE FAST XL,100","Accessories",1920.0,1281.33],["PD-100450","CONE FAST M,50","Accessories",970.0,648.78],["PD-100451","CONE FAST XL,25","Accessories",760.0,1077.32],["PD-100452","CONE FAST S,25","Accessories",640.0,426.83],["PD-100453","CONE FAST S,50","Accessories",970.0,648.78],["PD-100454","CONE FAST XL,50","Accessories",970.0,771.26],["PD-100455","CONE FAST S,100","Accessories",1620.0,1280.33],["PD-100456","CONE FAST M,100","Accessories",1620.0,1077.32],["PD-100457","CONE FAST M,25","Accessories",640.0,426.83],["PD-100458","ESPRESSO SOFT FILTER","Accessories",600.0,398.32],["PD-100459","ESPRESSO HIGH CELLUL","Accessories",700.0,468.88],["PD-100460","ESPRESSO HIGH MEMBRA","Accessories",900.0,597.93],["PD-100461","CAFEC Abaca 4CUP","Accessories",195.0,126.0],["PD-100462","CAFEC Abaca 1CUP","Accessories",175.0,112.0],["PD-100463","Felicita ARC","Accessories",4560.0,3300.0],["PD-100464","ชาพีช 500g.","Non-Coffee",130.0,98.99],["PD-100465","ชาพีช 1kg.","Non-Coffee",260.0,180.0],["PD-100466","Doi Pangkhon 500g.","Espresso",342.5,0.0],["PD-100467","Doi Pangkhon (Yor-Chue) 500g.","Espresso",375.0,220.83],["PD-100468","Doi Pangkhon (Yor-Ta) 500g.","Espresso",375.0,220.83],["PD-100469","Milk Choc 1kg. (Nologo)","Espresso",750.0,454.46],["PD-100470","House Blend 500g. (Nologo)","Espresso",300.0,0.0],["PD-100471","Special Blend 500g. (Nologo)","Espresso",375.0,0.0],["PD-100472","บ้านค่าย 500g.","Espresso",360.0,209.73],["PD-100473","บางบุตร 500g.","Espresso",400.0,0.0],["PD-100474","ชากมะหาด 500g.","Espresso",400.0,0.0],["PD-100475","ระยองเบลนด์ 500g.","Espresso",300.0,214.11],["PD-100476","Mae Buh Yah 209 500g. (Nologo)","Espresso",375.0,0.0],["PD-100477","Lao 236 500g. (Nologo)","Espresso",375.0,0.0],["PD-100478","Robusta 245 500g. (Nologo)","Espresso",275.0,0.0],["PD-100479","Early Bird 1kg. (Nologo)","Espresso",490.0,0.0],["PD-100480","ชาไทย(1) 1kg. (Nologo)","Non-Coffee",0.0,0.0],["PD-100481","Nishio Matcha 50g.","Non-Coffee",205.0,103.62],["PD-100482","Nishio Matcha 100g.","Non-Coffee",380.0,196.12],["PD-100483","Nishio Matcha 200g.","Non-Coffee",730.0,385.74],["PD-100484","Nishio Matcha 500g.","Non-Coffee",1750.0,964.77],["PD-100485","Nishio Matcha 1kg","Non-Coffee",3500.0,1905.56],["PD-100486","Mie Matcha 30g.","Non-Coffee",420.0,250.97],["PD-100487","Mie Matcha 50g.","Non-Coffee",520.0,336.15],["PD-100488","Mie Matcha 100g.","Non-Coffee",1010.0,666.74],["PD-100489","Mie Matcha 200g.","Non-Coffee",1990.0,1332.54],["PD-100490","Mie Matcha 500g.","Non-Coffee",4900.0,3328.7],["PD-100491","Mie Matcha 1kg.","Non-Coffee",9800.0,6639.56],["PD-100492","Light Fruit 1000ml.,Light Fruit 200ml","Promotion",300.0,131.58],["PD-100493","Light Fruit 1000ml.,Medium Choc 200ml","Promotion",300.0,131.58],["PD-100494","Light Fruit 1000ml.,Dark Choc 200ml","Promotion",300.0,131.58],["PD-100495","Light Fruit 1000ml.,Floral 200ml.","Promotion",300.0,131.58],["PD-100496","Light Fruit 1000ml.,Honey Lemon 200ml","Promotion",300.0,131.58],["PD-100497","Light Fruit 1000ml.,Berry Forest 200ml","Promotion",300.0,131.58],["PD-100498","Light Fruit 1000ml.,Toffee Caramel 200ml","Promotion",300.0,131.58],["PD-100499","Medium Choc 1000ml.,Light Fruit 200ml","Promotion",300.0,131.58],["PD-100500","Medium Choc 1000ml.,Medium Choc 200ml","Promotion",300.0,131.58],["PD-100501","Medium Choc 1000ml.,Dark Choc 200ml","Promotion",300.0,131.58],["PD-100502","Medium Choc 1000ml.,Floral 200ml.","Promotion",300.0,131.58],["PD-100503","Medium Choc 1000ml.,Honey Lemon 200ml","Promotion",300.0,131.58],["PD-100504","Medium Choc 1000ml.,Berry Forest 200ml","Promotion",300.0,131.58],["PD-100505","Medium Choc 1000ml.,Toffee Caramel 200ml","Promotion",300.0,131.58],["PD-100506","Dark Choc 1000ml.,Light Fruit 200ml","Promotion",300.0,131.58],["PD-100507","Dark Choc 1000ml.,Medium Choc 200ml","Promotion",300.0,131.58],["PD-100508","Dark Choc 1000ml.,Dark Choc 200ml","Promotion",300.0,131.58],["PD-100509","Dark Choc 1000ml.,Floral 200ml.","Promotion",300.0,131.58],["PD-100510","Dark Choc 1000ml.,Honey Lemon 200ml","Promotion",300.0,131.58],["PD-100511","Dark Choc 1000ml.,Berry Forest 200ml","Promotion",300.0,131.58],["PD-100512","Dark Choc 1000ml.,Toffee Caramel 200ml","Promotion",300.0,131.58],["PD-100513","Floral 1000ml.,Light Fruit 200ml","Promotion",300.0,131.58],["PD-100514","Floral 1000ml.,Medium Choc 200ml","Promotion",300.0,131.58],["PD-100515","Floral 1000ml.,Dark Choc 200ml","Promotion",300.0,131.58],["PD-100516","Floral 1000ml.,Floral 200ml.","Promotion",300.0,131.58],["PD-100517","Floral 1000ml.,Honey Lemon 200ml","Promotion",300.0,131.58],["PD-100518","Floral 1000ml.,Berry Forest 200ml","Promotion",300.0,131.58],["PD-100519","Floral 1000ml.,Toffee Caramel 200ml","Promotion",300.0,131.58],["PD-100520","Honey Lemon 1000ml.,Light Fruit 200ml","Promotion",380.0,153.63],["PD-100521","Honey Lemon 1000ml.,Medium Choc 200ml","Promotion",380.0,153.63],["PD-100522","Honey Lemon 1000ml.,Dark Choc 200ml","Promotion",380.0,153.63],["PD-100523","Honey Lemon 1000ml.,Floral 200ml.","Promotion",380.0,153.63],["PD-100524","Honey Lemon 1000ml.,Honey Lemon 200ml","Promotion",380.0,153.63],["PD-100525","Honey Lemon 1000ml.,Berry Forest 200ml","Promotion",380.0,153.63],["PD-100526","Honey Lemon 1000ml.,Toffee Caramel 200ml","Promotion",380.0,153.63],["PD-100527","Berry Forest 1000ml.,Light Fruit 200ml","Promotion",380.0,153.63],["PD-100528","Berry Forest 1000ml.,Medium Choc 200ml","Promotion",380.0,153.63],["PD-100529","Berry Forest 1000ml.,Dark Choc 200ml","Promotion",380.0,153.63],["PD-100530","Berry Forest 1000ml.,Floral 200ml.","Promotion",380.0,153.63],["PD-100531","Berry Forest 1000ml.,Honey Lemon 200ml","Promotion",380.0,153.63],["PD-100532","Berry Forest 1000ml.,Berry Forest 200ml","Promotion",380.0,153.63],["PD-100533","Berry Forest 1000ml.,Toffee Caramel 200ml","Promotion",380.0,153.63],["PD-100534","Toffee Caramel1000ml,Light Fruit 200ml","Promotion",380.0,153.63],["PD-100535","Toffee Caramel1000ml,Medium Choc 200ml","Promotion",380.0,153.63],["PD-100536","Toffee Caramel1000ml,Dark Choc 200ml","Promotion",380.0,153.63],["PD-100537","Toffee Caramel1000ml,Floral 200ml.","Promotion",380.0,153.63],["PD-100538","Toffee Caramel1000ml,Honey Lemon 200ml","Promotion",380.0,153.63],["PD-100539","Toffee Caramel1000ml,Berry Forest 200ml","Promotion",380.0,153.63],["PD-100540","Toffee Caramel1000ml,Toffee Caramel 200ml","Promotion",380.0,153.63],["PD-100541","Samui 1000ml.,Light Fruit 200ml","Promotion",380.0,153.63],["PD-100542","Samui 1000ml.,Medium Choc 200ml","Promotion",380.0,153.63],["PD-100543","Samui 1000ml.,Dark Choc 200ml","Promotion",380.0,153.63],["PD-100544","Samui 1000ml.,Floral 200ml.","Promotion",380.0,153.63],["PD-100545","Samui 1000ml.,Honey Lemon 200ml","Promotion",380.0,153.63],["PD-100546","Samui 1000ml.,Berry Forest 200ml","Promotion",380.0,153.63],["PD-100547","Samui 1000ml.,Toffee Caramel 200ml","Promotion",380.0,153.63],["PD-100548","Blush Fusion 1000ml.,Light Fruit 200ml","Promotion",380.0,153.63],["PD-100549","Blush Fusion 1000ml.,Medium Choc 200ml","Promotion",380.0,153.63],["PD-100550","Blush Fusion 1000ml.,Dark Choc 200ml","Promotion",380.0,153.63],["PD-100551","Blush Fusion 1000ml.,Floral 200ml.","Promotion",380.0,153.63],["PD-100552","Blush Fusion 1000ml.,Honey Lemon 200ml","Promotion",380.0,153.63],["PD-100553","Blush Fusion 1000ml.,Berry Forest 200ml","Promotion",380.0,153.63],["PD-100554","Blush Fusion 1000ml.,Toffee Caramel 200ml","Promotion",380.0,153.63],["PD-100555","Tom Yum 1000ml.,Light Fruit 200ml","Promotion",380.0,153.63],["PD-100556","Tom Yum 1000ml.,Medium Choc 200ml","Promotion",380.0,153.63],["PD-100557","Tom Yum 1000ml.,Dark Choc 200ml","Promotion",380.0,153.63],["PD-100558","Tom Yum 1000ml.,Floral 200ml.","Promotion",380.0,153.63],["PD-100559","Tom Yum 1000ml.,Honey Lemon 200ml","Promotion",380.0,153.63],["PD-100560","Tom Yum 1000ml.,Berry Forest 200ml","Promotion",380.0,153.63],["PD-100561","Tom Yum 1000ml.,Toffee Caramel 200ml","Promotion",380.0,153.63],["PD-100562","Mascarada Panama100g","Filter",690.0,250.64],["PD-100563","Mascarada Panama200g","Filter",1200.0,493.14],["PD-100564","แสงสว่าง 500g.","Espresso",300.0,214.11],["PD-100565","ดอยแม่สลอง 100g.","Filter",170.0,49.39],["PD-100566","ดอยแม่สลอง 200g.","Filter",300.0,90.64],["PD-100567","ดอยแม่สลอง M 250g.","Espresso",290.0,98.77],["PD-100568","ดอยแม่สลอง M 500g.","Espresso",370.0,213.48],["PD-100569","ดอยแม่สลอง M 1kg.","Espresso",740.0,426.96],["PD-100570","ดอยแม่สลอง MD 250g.","Espresso",290.0,98.77],["PD-100571","ดอยแม่สลอง MD 500g.","Espresso",370.0,213.48],["PD-100572","ดอยแม่สลอง MD 1kg.","Espresso",740.0,426.96],["PD-100573","พร้อมดื่มBZ Light","Cold Brew",70.0,22.32],["PD-100574","Brazil Light 200ml","Cold Brew",100.0,22.29],["PD-100575","Brazil Light 500ml","Cold Brew",220.0,59.08],["PD-100576","Brazil Light 1000ml","Cold Brew",330.0,107.47],["PD-100577","Brazil Light 5000ml","Cold Brew",1155.0,453.29],["PD-100578","พร้อมดื่มBZ Medium","Cold Brew",70.0,22.32],["PD-100579","Brazil  Medium 200ml","Cold Brew",100.0,22.29],["PD-100580","Brazil  Medium 500ml","Cold Brew",220.0,59.08],["PD-100581","Brazil  Medium 1000ml","Cold Brew",330.0,107.47],["PD-100582","Brazil  Medium 5000ml","Cold Brew",1155.0,453.29],["PD-100583","พร้อมดื่มBZ Dark","Cold Brew",70.0,22.34],["PD-100584","Brazil Dark 200ml","Cold Brew",100.0,22.3],["PD-100585","Brazil Dark 500ml","Cold Brew",220.0,59.12],["PD-100586","Brazil Dark 1000ml","Cold Brew",330.0,107.55],["PD-100587","Brazil Dark 5000ml","Cold Brew",1155.0,453.69],["PD-100588","มัทฉะแม่สลอง 100g","Non-Coffee",150.0,103.9],["PD-100589","มัทฉะแม่สลอง 200g","Non-Coffee",370.0,114.43],["PD-100590","มัทฉะแม่สลอง 500g","Non-Coffee",600.0,283.49],["PD-100591","มัทฉะแม่สลอง 1kg","Non-Coffee",1200.0,549.0],["PD-100592","กากกาแฟ 500g","nan",59.0,5.0],["PD-100593","กากกาแฟ 1kg","nan",89.0,10.0],["PD-100594","กากกาแฟ 5kg","nan",389.0,50.0],["PD-100595","Robusta Dark 500ml.","Cold Brew",150.0,0.0],["PD-100596","Robusta Dark 1000ml.","Cold Brew",250.0,0.0],["PD-100597","Robusta Dark 5000ml.","Cold Brew",1100.0,0.0]];
-const PRMAP = {};
-PR.forEach(p => { PRMAP[p[0]] = {sku:p[0],name:p[1],cat:p[2],sell:p[3],cost:p[4]}; });
-const CATS = ['ทั้งหมด',...Array.from(new Set(PR.map(p=>p[2]))).sort()];
-const CAT_LIST = Array.from(new Set(PR.map(p=>p[2]))).sort();
+// Products loaded from Supabase (see useProducts hook below)
+let PR = [];
+let PRMAP = {};
+let CATS = ['ทั้งหมด'];
+let CAT_LIST = [];
+
+function buildProductIndex(products) {
+  PR = products;
+  PRMAP = {};
+  PR.forEach(p => { PRMAP[p[0]] = {sku:p[0],name:p[1],cat:p[2],sell:p[3],cost:p[4]}; });
+  CATS = ['ทั้งหมด',...Array.from(new Set(PR.map(p=>p[2]))).sort()];
+  CAT_LIST = Array.from(new Set(PR.map(p=>p[2]))).sort();
+}
+
 const VAT_RATE = 0.07;
 
 const fmt   = n => Math.round(n).toLocaleString('th-TH');
@@ -286,8 +295,8 @@ function StockPage({stock,setStock}){
     if(!xlsxOk)return;
     exportXLSX('stock_count_template.xlsx',[{
       name:'นับสต็อก',
-      headers:['SKU','ชื่อสินค้า','หมวดสินค้า','ราคาทุน','Safety Stock','จำนวนที่นับได้ (กรอกที่นี่)','หมายเหตุ'],
-      data:PR.map(p=>{const d=stock[p[0]]||{qty:0,safety:10,cost:p[4]};return[p[0],p[1],p[2],fmtD(d.cost),d.safety,'',''];})
+      headers:['SKU','ชื่อสินค้า','หมวดสินค้า','ราคาทุน (ปัจจุบัน)','ราคาทุนใหม่ (แก้ได้-ว่าง=ไม่เปลี่ยน)','Safety (ปัจจุบัน)','Safety ใหม่ (แก้ได้-ว่าง=ไม่เปลี่ยน)','จำนวนที่นับได้ (ว่าง=ไม่เปลี่ยน)','หมายเหตุ'],
+      data:PR.map(p=>{const d=stock[p[0]]||{qty:0,safety:10,cost:p[4]};return[p[0],p[1],p[2],fmtD(d.cost),'',d.safety,'','',''];})
     }]);
   };
 
@@ -300,26 +309,44 @@ function StockPage({stock,setStock}){
       const wb=window.XLSX.read(buf,{type:'array'});
       const ws=wb.Sheets[wb.SheetNames[0]];
       const rows=window.XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
-      const header=rows[0].map(h=>String(h||'')).map(h=>h.toLowerCase());
-      const skuCol=header.findIndex(h=>h.includes('sku'));
-      const qtyCol=header.findIndex(h=>h.includes('นับ')||h.includes('จำนวน')||h.includes('qty'));
-      const sfCol=header.findIndex(h=>h.includes('safety'));
-      if(skuCol<0||qtyCol<0){setImportMsg('❌ ไม่พบคอลัมน์ SKU หรือจำนวน');setImporting(false);return;}
+      const header=rows[0].map(h=>String(h||'').toLowerCase());
+      const skuCol  = header.findIndex(h=>h.includes('sku'));
+      const qtyCol  = header.findIndex(h=>h.includes('นับ')||h.includes('จำนวน')||h.includes('qty'));
+      const sfCol   = header.findIndex(h=>h.includes('safety'));
+      const costCol = header.findIndex(h=>h.includes('ราคาทุน')||h.includes('ต้นทุน')||h.includes('cost'));
+      if(skuCol<0){setImportMsg('❌ ไม่พบคอลัมน์ SKU');setImporting(false);return;}
+      if(qtyCol<0&&costCol<0){setImportMsg('❌ ไม่พบคอลัมน์จำนวน หรือราคาทุน (ต้องมีอย่างน้อย 1 อย่าง)');setImporting(false);return;}
       const updates=[];
+      let updQty=0, updCost=0;
       for(let i=1;i<rows.length;i++){
-        const row=rows[i];const sku=String(row[skuCol]||'').trim();
+        const row=rows[i];
+        const sku=String(row[skuCol]||'').trim();
         if(!sku||!PRMAP[sku])continue;
-        const qty=parseInt(row[qtyCol]);
-        if(isNaN(qty)||qty<0)continue;
-        const sf=sfCol>=0&&row[sfCol]!==''?parseInt(row[sfCol]):stock[sku]?.safety||10;
-        const cost=stock[sku]?.cost||PRMAP[sku].cost;
-        updates.push({sku,qty,safety:isNaN(sf)?10:sf,cost});
+        // qty — ปล่อยว่างได้ ถ้าว่างใช้ค่าเดิม
+        const qtyRaw = qtyCol>=0 ? row[qtyCol] : '';
+        const qty    = qtyRaw!=='' ? parseInt(qtyRaw) : (stock[sku]?.qty??0);
+        if(isNaN(qty)||qty<0) continue;
+        // safety stock
+        const sfRaw  = sfCol>=0 ? row[sfCol] : '';
+        const sf     = sfRaw!=='' ? parseInt(sfRaw) : (stock[sku]?.safety||10);
+        // ราคาทุน — ปล่อยว่างได้ ถ้าว่างใช้ค่าเดิม
+        const costRaw = costCol>=0 ? row[costCol] : '';
+        const cost    = costRaw!=='' ? parseFloat(costRaw) : (stock[sku]?.cost||PRMAP[sku].cost);
+        if(isNaN(cost)||cost<0) continue;
+        if(qtyRaw!=='') updQty++;
+        if(costRaw!=='') updCost++;
+        updates.push({sku, qty, safety:isNaN(sf)?10:sf, cost});
       }
       if(!updates.length){setImportMsg('❌ ไม่พบข้อมูลที่ valid');setImporting(false);return;}
       const {error}=await supabase.from('stock').upsert(updates,{onConflict:'sku'});
       if(error){setImportMsg('❌ '+error.message);setImporting(false);return;}
-      const ns={...stock};updates.forEach(u=>{ns[u.sku]={qty:u.qty,safety:u.safety,cost:u.cost};});
-      setStock(ns);setImportMsg('✅ อัพเดทสต็อก '+updates.length+' รายการเรียบร้อย!');
+      const ns={...stock};
+      updates.forEach(u=>{ns[u.sku]={qty:u.qty,safety:u.safety,cost:u.cost};});
+      setStock(ns);
+      const parts=[];
+      if(updQty>0)  parts.push('สต็อก '+updQty+' รายการ');
+      if(updCost>0) parts.push('ราคาทุน '+updCost+' รายการ');
+      setImportMsg('✅ อัพเดท '+parts.join(' · ')+' เรียบร้อย!');
     }catch(e){setImportMsg('❌ อ่านไฟล์ไม่ได้: '+e.message);}
     setImporting(false);
   };
@@ -902,10 +929,241 @@ function PlanPage({stock,sales}){
 }
 
 // ════════════════════════════════════════════════════════
+// PRODUCT PAGE — จัดการสินค้า (เพิ่ม/แก้ไข/ลบ/เปลี่ยนชื่อ)
+// ════════════════════════════════════════════════════════
+function ProductPage({products, setProducts, stock, setStock}){
+  const [kw,setKw]       = useState('');
+  const [cat,setCat]     = useState('ทั้งหมด');
+  const [showForm,setShowForm] = useState(false);
+  const [editItem,setEditItem] = useState(null);
+  const [saving,setSaving]     = useState(false);
+  const [msg,setMsg]           = useState('');
+  const [delConfirm,setDelConfirm] = useState(null);
+  const xlsxOk = useXLSX();
+
+  // Form state
+  const EMPTY = {sku:'',name:'',cat:'',sell:'',cost:'',safety:10};
+  const [form,setForm] = useState(EMPTY);
+
+  const cats = ['ทั้งหมด',...Array.from(new Set(products.map(p=>p[2]))).sort()];
+
+  const filtered = useMemo(()=>{
+    const k = kw.toLowerCase().trim();
+    const words = k ? k.split(/\s+/).filter(Boolean) : [];
+    return products.filter(p=>{
+      const hay = (p[0]+' '+p[1]+' '+p[2]).toLowerCase();
+      const mkw = !k || words.every(w=>hay.includes(w));
+      const mc  = cat==='ทั้งหมด' || p[2]===cat;
+      return mkw && mc;
+    });
+  },[products,kw,cat]);
+
+  const openAdd = () => {
+    setForm(EMPTY); setEditItem(null); setShowForm(true); setMsg('');
+  };
+
+  const openEdit = p => {
+    setForm({sku:p[0],name:p[1],cat:p[2],sell:p[3],cost:p[4],safety:stock[p[0]]?.safety||10});
+    setEditItem(p[0]); setShowForm(true); setMsg('');
+  };
+
+  const saveProduct = async () => {
+    if(!form.sku.trim()||!form.name.trim()||!form.cat.trim()){
+      setMsg('❌ กรุณากรอก SKU, ชื่อสินค้า และหมวดสินค้า'); return;
+    }
+    const sell = parseFloat(form.sell)||0;
+    const cost = parseFloat(form.cost)||0;
+    const safety = parseInt(form.safety)||10;
+    setSaving(true); setMsg('');
+
+    if(editItem){
+      // Update existing product
+      const {error} = await supabase.from('products').update({
+        name:form.name.trim(), cat:form.cat.trim(), sell, cost
+      }).eq('sku', editItem);
+      if(error){setMsg('❌ '+error.message); setSaving(false); return;}
+      // Update stock cost+safety
+      await supabase.from('stock').upsert([{sku:editItem,safety,cost,qty:stock[editItem]?.qty||0}],{onConflict:'sku'});
+      // Update local state
+      const newProds = products.map(p=>p[0]===editItem?[p[0],form.name.trim(),form.cat.trim(),sell,cost]:p);
+      buildProductIndex(newProds);
+      setProducts(newProds);
+      setStock(s=>({...s,[editItem]:{...s[editItem],cost,safety}}));
+      setMsg('✅ อัพเดทสินค้า '+editItem+' เรียบร้อย');
+    } else {
+      // Check duplicate SKU
+      if(products.find(p=>p[0]===form.sku.trim())){
+        setMsg('❌ รหัส SKU นี้มีอยู่แล้ว'); setSaving(false); return;
+      }
+      // Add new product
+      const newSku = form.sku.trim();
+      const {error} = await supabase.from('products').insert([{
+        sku:newSku, name:form.name.trim(), cat:form.cat.trim(), sell, cost
+      }]);
+      if(error){setMsg('❌ '+error.message); setSaving(false); return;}
+      // Add stock entry
+      await supabase.from('stock').upsert([{sku:newSku,qty:0,safety,cost}],{onConflict:'sku'});
+      const newProds = [...products,[newSku,form.name.trim(),form.cat.trim(),sell,cost]];
+      buildProductIndex(newProds);
+      setProducts(newProds);
+      setStock(s=>({...s,[newSku]:{qty:0,safety,cost}}));
+      setMsg('✅ เพิ่มสินค้า '+newSku+' เรียบร้อย');
+    }
+    setSaving(false); setShowForm(false); setForm(EMPTY); setEditItem(null);
+  };
+
+  const deleteProduct = async sku => {
+    setSaving(true); setMsg('');
+    const {error} = await supabase.from('products').delete().eq('sku',sku);
+    if(error){setMsg('❌ '+error.message); setSaving(false); setDelConfirm(null); return;}
+    const newProds = products.filter(p=>p[0]!==sku);
+    buildProductIndex(newProds);
+    setProducts(newProds);
+    setDelConfirm(null); setSaving(false);
+    setMsg('✅ ลบสินค้า '+sku+' เรียบร้อย');
+  };
+
+  // Export product list
+  const exportProducts = () => {
+    if(!xlsxOk) return;
+    exportXLSX('products.xlsx',[{
+      name:'สินค้าทั้งหมด',
+      headers:['SKU','ชื่อสินค้า','หมวดสินค้า','ราคาขาย (฿)','ราคาทุน (฿)','Safety Stock','สต็อก'],
+      data: products.map(p=>{
+        const d = stock[p[0]]||{qty:0,safety:10};
+        return [p[0],p[1],p[2],p[3],p[4],d.safety,d.qty];
+      })
+    }]);
+  };
+
+  const F = (field,label,type='text',placeholder='') => (
+    <div style={{marginBottom:10}}>
+      <div style={{fontSize:12,color:T.textMuted,marginBottom:4}}>{label}</div>
+      {field==='cat' ? (
+        <div style={{display:'flex',gap:6}}>
+          <select style={{...S.inp,flex:1}} value={form.cat} onChange={e=>setForm(f=>({...f,cat:e.target.value}))}>
+            <option value="">-- เลือกหมวด --</option>
+            {Array.from(new Set(products.map(p=>p[2]))).sort().map(c=><option key={c}>{c}</option>)}
+          </select>
+          <span style={{fontSize:12,color:T.textMuted,alignSelf:'center'}}>หรือพิมพ์ใหม่:</span>
+          <input style={{...S.inp,flex:1}} placeholder="หมวดใหม่..." value={form.cat}
+            onChange={e=>setForm(f=>({...f,cat:e.target.value}))}/>
+        </div>
+      ) : (
+        <input type={type} style={{...S.inp,width:'100%'}} placeholder={placeholder}
+          value={form[field]} onChange={e=>setForm(f=>({...f,[field]:e.target.value}))}
+          disabled={field==='sku'&&!!editItem}/>
+      )}
+    </div>
+  );
+
+  return (
+    <div>
+      {/* Toolbar */}
+      <div style={S.card}>
+        <div style={{...S.row,gap:8,flexWrap:'wrap'}}>
+          <input style={{...S.inp,flex:2,minWidth:160}} placeholder="ค้นหาชื่อ / SKU" value={kw} onChange={e=>setKw(e.target.value)}/>
+          <select style={S.inp} value={cat} onChange={e=>setCat(e.target.value)}>
+            {cats.map(c=><option key={c}>{c}</option>)}
+          </select>
+          <span style={{fontSize:12,color:T.textMuted}}>{filtered.length} รายการ</span>
+          <div style={{flex:1}}/>
+          <button style={btn('gr',{fontSize:12})} onClick={exportProducts} disabled={!xlsxOk}>📥 Export</button>
+          <button style={btn('dk')} onClick={openAdd}>➕ เพิ่มสินค้าใหม่</button>
+        </div>
+        {msg&&<div style={{marginTop:10,padding:'8px 12px',borderRadius:T.radius,fontSize:12,background:msg.startsWith('✅')?T.greenLight:T.redLight,color:msg.startsWith('✅')?T.green:T.red,fontWeight:500}}>{msg}</div>}
+      </div>
+
+      {/* Add/Edit Form */}
+      {showForm&&(
+        <div style={{...S.card,border:`2px solid ${T.dark}`,background:'#FAFFFE'}}>
+          <div style={{...S.cardTitle,marginBottom:16}}>
+            {editItem?'✏️ แก้ไขสินค้า '+editItem:'➕ เพิ่มสินค้าใหม่'}
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 16px'}}>
+            <div>
+              {F('sku','รหัส SKU *','text','เช่น PD-100598')}
+              {F('name','ชื่อสินค้า *','text','เช่น Dark Roast 250g.')}
+              {F('cat','หมวดสินค้า *')}
+            </div>
+            <div>
+              {F('sell','ราคาขาย (฿)','number','0')}
+              {F('cost','ราคาทุน (฿)','number','0')}
+              {F('safety','Safety Stock (หน่วย)','number','10')}
+            </div>
+          </div>
+          <div style={{...S.row,gap:8,marginTop:8}}>
+            <button style={btn('gr')} onClick={saveProduct} disabled={saving}>
+              {saving?'กำลังบันทึก...':'💾 บันทึก'}
+            </button>
+            <button style={btn('gy')} onClick={()=>{setShowForm(false);setForm(EMPTY);setMsg('');}}>
+              ยกเลิก
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirm dialog */}
+      {delConfirm&&(
+        <div style={{...S.card,border:`2px solid ${T.red}`,background:T.redLight}}>
+          <div style={{fontWeight:600,color:T.red,marginBottom:8}}>⚠️ ยืนยันการลบสินค้า</div>
+          <div style={{marginBottom:12,fontSize:13}}>
+            ลบ <b>{delConfirm.name}</b> ({delConfirm.sku}) ออกจากระบบ?
+            {(stock[delConfirm.sku]?.qty||0)>0&&<div style={{color:T.red,marginTop:4}}>⚠️ ยังมีสต็อกเหลืออยู่ {stock[delConfirm.sku]?.qty} ชิ้น</div>}
+          </div>
+          <div style={S.row}>
+            <button style={btn('rd')} onClick={()=>deleteProduct(delConfirm.sku)} disabled={saving}>
+              {saving?'กำลังลบ...':'🗑️ ยืนยันลบ'}
+            </button>
+            <button style={btn('gy')} onClick={()=>setDelConfirm(null)}>ยกเลิก</button>
+          </div>
+        </div>
+      )}
+
+      {/* Product table */}
+      <div style={S.tow}>
+        <table style={S.tbl}>
+          <thead><tr>
+            {['#','SKU','ชื่อสินค้า','หมวด','ราคาขาย','ราคาทุน','Safety','สต็อก','จัดการ'].map((h,i)=>(
+              <th key={i} style={S.th}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {filtered.map((p,i)=>{
+              const d = stock[p[0]]||{qty:0,safety:10};
+              return (
+                <tr key={p[0]}>
+                  <td style={tdr(i)}>{i+1}</td>
+                  <td style={{...tdr(i),color:T.blue,fontWeight:600}}>{p[0]}</td>
+                  <td style={tdr(i)}>{p[1]}</td>
+                  <td style={{...tdr(i),fontSize:11,color:T.textMuted}}>{p[2]}</td>
+                  <td style={tdr(i)}>฿{fmt(p[3])}</td>
+                  <td style={tdr(i)}>฿{fmtD(p[4])}</td>
+                  <td style={tdr(i)}>{d.safety}</td>
+                  <td style={{...tdr(i),color:d.qty===0?T.red:d.qty<=d.safety?T.amber:T.green,fontWeight:500}}>{d.qty}</td>
+                  <td style={tdr(i)}>
+                    <div style={{display:'flex',gap:4}}>
+                      <button style={btn('dk',{padding:'3px 10px',fontSize:11})} onClick={()=>openEdit(p)}>แก้ไข</button>
+                      <button style={btn('rd',{padding:'3px 10px',fontSize:11})} onClick={()=>setDelConfirm({sku:p[0],name:p[1]})}>ลบ</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+
+// ════════════════════════════════════════════════════════
 // MAIN APP
 // ════════════════════════════════════════════════════════
 export default function App(){
   const [tab,setTab]=useState('dash');
+  const [products,setProducts]=useState([]);
   const [stock,setStock]=useState({});
   const [sales,setSales]=useState([]);
   const [loading,setLoading]=useState(true);
@@ -913,19 +1171,28 @@ export default function App(){
 
   useEffect(()=>{
     (async()=>{
-      const [{data:stData,error:stErr},{data:salData}]=await Promise.all([
+      // Load products, stock, sales in parallel
+      const [prodRes, stRes, salRes] = await Promise.all([
+        supabase.from('products').select('*').order('cat').order('name'),
         supabase.from('stock').select('*'),
         supabase.from('sales').select('*').order('date',{ascending:false}).limit(2000)
       ]);
-      if(stErr){setError('ไม่สามารถเชื่อมต่อ Supabase: '+stErr.message);setLoading(false);return;}
-      const sm={};(stData||[]).forEach(r=>{sm[r.sku]={qty:r.qty,safety:r.safety,cost:r.cost};});
-      const missing=PR.filter(p=>!sm[p[0]]).map(p=>({sku:p[0],qty:0,safety:10,cost:p[4]}));
-      if(missing.length>0){await supabase.from('stock').upsert(missing,{onConflict:'sku',ignoreDuplicates:true});missing.forEach(r=>{sm[r.sku]={qty:0,safety:10,cost:r.cost};});}
-      setStock(sm);setSales(salData||[]);setLoading(false);
+      if(prodRes.error){setError('โหลดข้อมูลสินค้าไม่ได้: '+prodRes.error.message);setLoading(false);return;}
+      if(stRes.error){setError('โหลดสต็อกไม่ได้: '+stRes.error.message);setLoading(false);return;}
+      // Build product index
+      const prods = (prodRes.data||[]).map(p=>[p.sku,p.name,p.cat,p.sell,p.cost]);
+      buildProductIndex(prods);
+      setProducts(prods);
+      // Build stock map
+      const sm={};
+      (stRes.data||[]).forEach(r=>{sm[r.sku]={qty:r.qty,safety:r.safety,cost:r.cost};});
+      setStock(sm);
+      setSales(salRes.data||[]);
+      setLoading(false);
     })();
   },[]);
 
-  const tabs=[['dash','📊','Dashboard'],['stock','📦','สต็อก'],['sales','💰','บันทึกขาย'],['report','📈','รายงาน'],['plan','🏭','แผนผลิต']];
+  const tabs=[['dash','📊','Dashboard'],['stock','📦','สต็อก'],['products','🏷️','สินค้า'],['sales','💰','บันทึกขาย'],['report','📈','รายงาน'],['plan','🏭','แผนผลิต']];
 
   if(loading)return<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:12,color:T.textMuted,fontFamily:"Arial,sans-serif"}}><div style={{fontSize:40}}>☕</div><div>กำลังโหลดระบบ...</div></div>;
   if(error)return<div style={{padding:40,color:T.red,fontFamily:"Arial,sans-serif"}}>❌ {error}</div>;
@@ -950,11 +1217,12 @@ export default function App(){
             </button>
           ))}
         </div>
-        {tab==='dash'  &&<Dashboard stock={stock} sales={sales}/>}
-        {tab==='stock' &&<StockPage stock={stock} setStock={setStock}/>}
-        {tab==='sales' &&<SalesPage stock={stock} setStock={setStock} setSales={setSales}/>}
-        {tab==='report'&&<ReportPage sales={sales}/>}
-        {tab==='plan'  &&<PlanPage stock={stock} sales={sales}/>}
+        {tab==='dash'     &&<Dashboard stock={stock} sales={sales}/>}
+        {tab==='stock'    &&<StockPage stock={stock} setStock={setStock}/>}
+        {tab==='products' &&<ProductPage products={products} setProducts={setProducts} stock={stock} setStock={setStock}/>}
+        {tab==='sales'    &&<SalesPage stock={stock} setStock={setStock} setSales={setSales}/>}
+        {tab==='report'   &&<ReportPage sales={sales}/>}
+        {tab==='plan'     &&<PlanPage stock={stock} sales={sales}/>}
       </div>
     </div>
   );
