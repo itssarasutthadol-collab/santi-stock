@@ -1107,7 +1107,9 @@ function SalesPage({stock,setStock,setSales,staff=[],profile}){
 // ════════════════════════════════════════════════════════
 // REPORT PAGE
 // ════════════════════════════════════════════════════════
-function ReportPage({stock,sales}){
+function ReportPage({stock,sales,permissions={}}){
+  const seeProfit = permissions['dashboard']?.see_profit !== false;
+  const seeCost   = permissions['dashboard']?.see_cost   !== false;
   const now = new Date();
   const thisYear  = now.getFullYear();
   const thisMonth = now.getMonth();
@@ -1991,9 +1993,13 @@ function UserManagePage({profile}){
               <div>
                 <div style={{fontSize:12,color:T.textMuted,marginBottom:3}}>สิทธิ์</div>
                 <select style={{...S.inp,width:'100%'}} value={invRole} onChange={e=>setInvRole(e.target.value)}>
-                  <option value="admin">👑 Admin — เห็นทุกอย่าง</option>
-                  <option value="sales">💰 Sales — เห็นขาย+สต็อก (ไม่เห็นต้นทุน/กำไร)</option>
-                  <option value="warehouse">📦 Warehouse — เห็นแค่สต็อก</option>
+                  <option value="admin">👑 Admin — ดูแลระบบทั้งหมด</option>
+                  <option value="manager">📊 Manager — เห็นทุกอย่างยกเว้นตั้งค่า user</option>
+                  <option value="sales">💰 Sales — บันทึกขาย ดูสต็อก (ไม่เห็นต้นทุน/กำไร)</option>
+                  <option value="warehouse">📦 Warehouse — จัดการสต็อก ไม่เห็นราคา</option>
+                  <option value="production">🏭 Production — แผนผลิต+สต็อก</option>
+                  <option value="accounting">🧾 Accounting — รายงาน+กำไร ดูอย่างเดียว</option>
+                  <option value="viewer">👁️ Viewer — ดูข้อมูลอย่างเดียว</option>
                 </select>
               </div>
             </div>
@@ -2017,9 +2023,13 @@ function UserManagePage({profile}){
                   <td style={tdr(i)}>
                     {u.id!==profile.id&&(
                       <select style={{...S.inp,padding:'3px 6px',fontSize:11}} value={u.role} onChange={e=>updateRole(u.id,e.target.value)}>
-                        <option value="admin">Admin</option>
-                        <option value="sales">Sales</option>
-                        <option value="warehouse">Warehouse</option>
+                        <option value="admin">👑 Admin</option>
+                        <option value="manager">📊 Manager</option>
+                        <option value="sales">💰 Sales</option>
+                        <option value="warehouse">📦 Warehouse</option>
+                        <option value="production">🏭 Production</option>
+                        <option value="accounting">🧾 Accounting</option>
+                        <option value="viewer">👁️ Viewer</option>
                       </select>
                     )}
                   </td>
@@ -2096,11 +2106,295 @@ function UserManagePage({profile}){
 }
 
 // ════════════════════════════════════════════════════════
+// SETTINGS PAGE — Permission Matrix + System Settings
+// ════════════════════════════════════════════════════════
+const ROLE_LIST = [
+  {v:'admin',      l:'👑 Admin',          desc:'ดูแลระบบทั้งหมด'},
+  {v:'manager',    l:'📊 Manager',        desc:'ผู้จัดการ เห็นทุกอย่างยกเว้นตั้งค่า user'},
+  {v:'sales',      l:'💰 Sales',          desc:'ทีมขาย บันทึกบิล ดูสต็อก'},
+  {v:'warehouse',  l:'📦 Warehouse',      desc:'คลังสินค้า จัดการสต็อก'},
+  {v:'production', l:'🏭 Production',     desc:'ฝ่ายผลิต ดูแผนผลิตและสต็อก'},
+  {v:'accounting', l:'🧾 Accounting',     desc:'บัญชี ดูรายงานและกำไร'},
+  {v:'viewer',     l:'👁️ Viewer',          desc:'ดูข้อมูลอย่างเดียว'},
+];
+
+const PAGE_LIST = [
+  {v:'dashboard', l:'📊 Dashboard & รายงาน'},
+  {v:'stock',     l:'📦 สต็อก'},
+  {v:'products',  l:'🏷️ สินค้า'},
+  {v:'sales',     l:'💰 บันทึกขาย'},
+  {v:'plan',      l:'🏭 แผนผลิต'},
+  {v:'users',     l:'👥 จัดการผู้ใช้'},
+  {v:'settings',  l:'⚙️ ตั้งค่าระบบ'},
+];
+
+const PERM_COLS = [
+  {v:'can_view',   l:'ดูได้',     color:'#1D4ED8'},
+  {v:'can_edit',   l:'แก้ไขได้',  color:'#15803D'},
+  {v:'see_cost',   l:'เห็นต้นทุน',color:'#B45309'},
+  {v:'see_profit', l:'เห็นกำไร',  color:'#7C3AED'},
+];
+
+function SettingsPage({permissions, setPermissions, profile}){
+  const [selRole, setSelRole] = useState('sales');
+  const [matrix,  setMatrix]  = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving,  setSaving]  = useState(false);
+  const [msg,     setMsg]     = useState('');
+  const [activeTab, setActiveTab] = useState('permissions');
+
+  // Company settings
+  const [company, setCompany] = useState({
+    name:   'บริษัท สันติพาณิชย์ โรสเตอร์ จำกัด',
+    address:'29/35 หมู่ที่ 6 ตำบลโคกแย้ อำเภอหนองแค จังหวัดสระบุรี 18230',
+    tel:    '095-356-2974',
+    tax_id: '0195561000941',
+  });
+
+  useEffect(()=>{
+    loadMatrix();
+  },[]);
+
+  const loadMatrix = async () => {
+    setLoading(true);
+    const {data} = await supabase.from('role_permissions').select('*');
+    const m = {};
+    (data||[]).forEach(p=>{
+      if(!m[p.role]) m[p.role]={};
+      m[p.role][p.page_id] = p;
+    });
+    setMatrix(m);
+    setLoading(false);
+  };
+
+  const togglePerm = (role, page, col) => {
+    if(role==='admin') return; // admin ล็อคไว้
+    setMatrix(prev=>{
+      const cur = prev[role]?.[page]?.[col]||false;
+      return {
+        ...prev,
+        [role]:{
+          ...prev[role],
+          [page]:{
+            ...(prev[role]?.[page]||{}),
+            [col]:!cur,
+            // ถ้า can_view = false ให้ปิดอันอื่นด้วย
+            ...(!cur===false && col==='can_view' ? {can_edit:false,see_cost:false,see_profit:false} : {}),
+          }
+        }
+      };
+    });
+  };
+
+  const saveMatrix = async () => {
+    setSaving(true); setMsg('');
+    const upserts = [];
+    for(const [role, pages] of Object.entries(matrix)){
+      if(role==='admin') continue;
+      for(const [page_id, perms] of Object.entries(pages)){
+        upserts.push({
+          role, page_id,
+          can_view:   perms.can_view   || false,
+          can_edit:   perms.can_edit   || false,
+          see_cost:   perms.see_cost   || false,
+          see_profit: perms.see_profit || false,
+          updated_at: new Date().toISOString(),
+        });
+      }
+    }
+    const {error} = await supabase.from('role_permissions').upsert(upserts,{onConflict:'role,page_id'});
+    if(error){ setMsg('❌ '+error.message); setSaving(false); return; }
+    setMsg('✅ บันทึกสิทธิ์เรียบร้อย มีผลทันทีกับทุก user ใน role นี้');
+    setSaving(false);
+    // Reload permissions for current user
+    const {data:myPerms} = await supabase.from('role_permissions').select('*').eq('role',profile.role);
+    const pm={};
+    (myPerms||[]).forEach(p=>{pm[p.page_id]=p;});
+    setPermissions(pm);
+  };
+
+  const getPerm = (role, page, col) => {
+    if(role==='admin') return true;
+    return matrix[role]?.[page]?.[col] || false;
+  };
+
+  if(loading) return <div style={{padding:40,textAlign:'center',color:T.textMuted}}>⏳ กำลังโหลด...</div>;
+
+  return(
+    <div>
+      {/* Sub-tabs */}
+      <div style={{...S.nav,marginBottom:14}}>
+        {[['permissions','🔐 จัดการสิทธิ์'],['company','🏢 ข้อมูลบริษัท']].map(([v,l])=>(
+          <button key={v} style={nbtn(activeTab===v)} onClick={()=>setActiveTab(v)}>{l}</button>
+        ))}
+      </div>
+
+      {activeTab==='permissions'&&(
+        <div>
+          {msg&&<div style={{...S.card,background:msg.startsWith('✅')?T.greenLight:T.redLight,color:msg.startsWith('✅')?T.green:T.red,fontWeight:500,marginBottom:12}}>{msg}</div>}
+
+          {/* Role selector */}
+          <div style={S.card}>
+            <div style={S.cardTitle}>🔐 Matrix สิทธิ์การใช้งาน</div>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+              {ROLE_LIST.map(r=>(
+                <button key={r.v} style={{
+                  ...nbtn(selRole===r.v),
+                  padding:'8px 14px',
+                  background: selRole===r.v ? T.dark : 'transparent',
+                  color: selRole===r.v ? '#EFF7F3' : T.text,
+                  borderRadius: T.radius,
+                  fontSize:12,
+                }} onClick={()=>setSelRole(r.v)}>
+                  {r.l}
+                </button>
+              ))}
+            </div>
+
+            {/* Role description */}
+            <div style={{padding:'8px 12px',background:T.blueLight,borderRadius:T.radius,fontSize:12,color:T.blue,marginBottom:14}}>
+              {ROLE_LIST.find(r=>r.v===selRole)?.desc}
+              {selRole==='admin'&&' — สิทธิ์ Admin ล็อคไว้ ไม่สามารถแก้ไขได้'}
+            </div>
+
+            {/* Permission matrix table */}
+            <div style={S.tow}>
+              <table style={{...S.tbl,fontSize:12}}>
+                <thead>
+                  <tr>
+                    <th style={{...S.th,minWidth:160}}>หน้า</th>
+                    {PERM_COLS.map(c=>(
+                      <th key={c.v} style={{...S.th,textAlign:'center',minWidth:90}}>
+                        <div style={{color:c.color==='#1D4ED8'?'#93C5FD':c.color==='#15803D'?'#86EFAC':c.color==='#B45309'?'#FCD34D':'#C4B5FD'}}>{c.l}</div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {PAGE_LIST.map((page,i)=>(
+                    <tr key={page.v}>
+                      <td style={{...tdr(i),fontWeight:500}}>{page.l}</td>
+                      {PERM_COLS.map(col=>{
+                        const val = getPerm(selRole, page.v, col.v);
+                        const canView = getPerm(selRole, page.v, 'can_view');
+                        const disabled = selRole==='admin' || (col.v!=='can_view'&&!canView);
+                        return(
+                          <td key={col.v} style={{...tdr(i),textAlign:'center'}}>
+                            <label style={{cursor:disabled?'not-allowed':'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>
+                              <input type="checkbox"
+                                checked={val}
+                                disabled={disabled}
+                                onChange={()=>!disabled&&togglePerm(selRole,page.v,col.v)}
+                                style={{width:16,height:16,cursor:disabled?'not-allowed':'pointer',accentColor:col.color}}
+                              />
+                            </label>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Legend */}
+            <div style={{display:'flex',gap:16,marginTop:10,flexWrap:'wrap'}}>
+              {PERM_COLS.map(c=>(
+                <div key={c.v} style={{display:'flex',alignItems:'center',gap:4,fontSize:11,color:T.textMuted}}>
+                  <div style={{width:12,height:12,borderRadius:2,background:c.color}}/>
+                  <span><b style={{color:c.color}}>{c.l}</b></span>
+                </div>
+              ))}
+              <div style={{fontSize:11,color:T.textMuted}}>| ⚠️ ต้องติ๊ก "ดูได้" ก่อน ถึงจะเปิดอันอื่นได้</div>
+            </div>
+
+            {selRole!=='admin'&&(
+              <div style={{marginTop:14}}>
+                <button style={btn('gr')} onClick={saveMatrix} disabled={saving}>
+                  {saving?'กำลังบันทึก...':'💾 บันทึกสิทธิ์ทั้งหมด'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* All roles overview */}
+          <div style={S.card}>
+            <div style={S.cardTitle}>📋 ภาพรวมสิทธิ์ทุก Role</div>
+            <div style={S.tow}>
+              <table style={{...S.tbl,fontSize:11}}>
+                <thead>
+                  <tr>
+                    <th style={S.th}>หน้า</th>
+                    {ROLE_LIST.map(r=><th key={r.v} style={{...S.th,textAlign:'center'}}>{r.l.split(' ')[0]}<br/>{r.l.split(' ').slice(1).join(' ')}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {PAGE_LIST.map((page,i)=>(
+                    <tr key={page.v}>
+                      <td style={{...tdr(i),fontWeight:500}}>{page.l}</td>
+                      {ROLE_LIST.map(role=>{
+                        const v = getPerm(role.v,page.v,'can_view');
+                        const e = getPerm(role.v,page.v,'can_edit');
+                        const c = getPerm(role.v,page.v,'see_cost');
+                        const p = getPerm(role.v,page.v,'see_profit');
+                        return(
+                          <td key={role.v} style={{...tdr(i),textAlign:'center'}}>
+                            {!v ? <span style={{color:T.textMuted,fontSize:12}}>—</span> : (
+                              <div style={{fontSize:10,lineHeight:1.6}}>
+                                {v&&<span style={{color:T.blue}}>ดู </span>}
+                                {e&&<span style={{color:T.green}}>แก้ </span>}
+                                {c&&<span style={{color:T.amber}}>ทุน </span>}
+                                {p&&<span style={{color:'#7C3AED'}}>กำไร</span>}
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab==='company'&&(
+        <div style={S.card}>
+          <div style={S.cardTitle}>🏢 ข้อมูลบริษัท (แสดงในใบเสร็จ/ใบกำกับภาษี)</div>
+          {[
+            ['name',    'ชื่อบริษัท'],
+            ['address', 'ที่อยู่'],
+            ['tel',     'เบอร์โทรศัพท์'],
+            ['tax_id',  'เลขประจำตัวผู้เสียภาษี'],
+          ].map(([k,l])=>(
+            <div key={k} style={{marginBottom:12}}>
+              <div style={{fontSize:12,color:T.textMuted,marginBottom:4}}>{l}</div>
+              <input style={{...S.inp,width:'100%'}} value={company[k]} onChange={e=>setCompany(c=>({...c,[k]:e.target.value}))}/>
+            </div>
+          ))}
+          <div style={{padding:'10px 14px',background:T.amberLight,borderRadius:T.radius,fontSize:12,color:T.amber,marginBottom:14}}>
+            ⚠️ การแก้ไขข้อมูลบริษัทตรงนี้จะมีผลกับใบเสร็จที่ออกหลังจากนี้เท่านั้น และจะถูก reset เมื่อ deploy ใหม่ หากต้องการให้ถาวรต้องแก้ในไฟล์ App.jsx
+          </div>
+          <button style={btn('gr')} onClick={()=>{
+            // Update COMPANY object in memory
+            window.__COMPANY__ = company;
+            setMsg('✅ อัพเดทข้อมูลบริษัทแล้ว (ชั่วคราว)');
+          }}>💾 บันทึก</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ════════════════════════════════════════════════════════
 // MAIN APP — with Auth
 // ════════════════════════════════════════════════════════
 export default function App(){
   const [user,setUser]       = useState(null);
   const [profile,setProfile] = useState(null);
+  const [permissions,setPermissions] = useState({});
   const [authLoading,setAuthLoading] = useState(true);
   const [tab,setTab]         = useState('report');
   const [products,setProducts] = useState([]);
@@ -2129,25 +2423,21 @@ export default function App(){
 
   // Load data after login
   useEffect(()=>{
-    if(!user) return;
+    if(!user||!profile) return;
     (async()=>{
       setLoading(true);
-      const isAdmin   = profile?.role==='admin';
-      const isSales   = profile?.role==='sales';
-      const isWarehouse = profile?.role==='warehouse';
-
-      const loads = [
+      // Load permissions for this role
+      const [permRes,prodRes,stRes,staffRes,salRes] = await Promise.all([
+        supabase.from('role_permissions').select('*').eq('role', profile.role),
         supabase.from('products').select('*').order('cat').order('name'),
         supabase.from('stock').select('*'),
         supabase.from('staff').select('*').eq('active',true).order('name'),
-      ];
-      // Sales & reports: admin + sales see sales; warehouse does not
-      if(isAdmin||isSales){
-        loads.push(supabase.from('sales').select('*').order('date',{ascending:false}).limit(2000));
-      }
-
-      const results = await Promise.all(loads);
-      const [prodRes,stRes,staffRes,salRes] = results;
+        supabase.from('sales').select('*').order('date',{ascending:false}).limit(2000),
+      ]);
+      // Build permission map
+      const permMap = {};
+      (permRes.data||[]).forEach(p=>{ permMap[p.page_id]=p; });
+      setPermissions(permMap);
 
       if(prodRes.error){ setError('โหลดสินค้าไม่ได้: '+prodRes.error.message); setLoading(false); return; }
       const prods = (prodRes.data||[]).map(p=>[p.sku,p.name,p.cat,p.sell,p.cost]);
@@ -2158,10 +2448,10 @@ export default function App(){
       (stRes.data||[]).forEach(r=>{ sm[r.sku]={qty:r.qty,safety:r.safety,cost:r.cost}; });
       setStock(sm);
       setStaff(staffRes.data||[]);
-      if(salRes) setSales(salRes.data||[]);
+      setSales(salRes.data||[]);
       setLoading(false);
     })();
-  },[user]);
+  },[user,profile]);
 
   const logout = async()=>{
     await supabase.auth.signOut();
@@ -2169,27 +2459,31 @@ export default function App(){
     setStock({}); setSales([]); setProducts([]);
   };
 
-  // Role-based tab access
-  const isAdmin     = profile?.role==='admin';
-  const isSales     = profile?.role==='sales';
-  const isWarehouse = profile?.role==='warehouse';
+  const isAdmin = profile?.role==='admin';
+
+  // Permission helpers — ใช้จาก database แทน hardcode
+  const can = (page, action='can_view') => {
+    if(isAdmin) return true;
+    return permissions[page]?.[action] || false;
+  };
 
   const allTabs = [
-    {v:'report',    icon:'📊', l:'Dashboard & รายงาน', roles:['admin','sales']},
-    {v:'stock',     icon:'📦', l:'สต็อก',               roles:['admin','sales','warehouse']},
-    {v:'products',  icon:'🏷️', l:'สินค้า',              roles:['admin']},
-    {v:'sales',     icon:'💰', l:'บันทึกขาย',           roles:['admin','sales']},
-    {v:'plan',      icon:'🏭', l:'แผนผลิต',             roles:['admin']},
-    {v:'users',     icon:'👥', l:'จัดการผู้ใช้',         roles:['admin']},
+    {v:'report',   icon:'📊', l:'Dashboard & รายงาน', page:'dashboard'},
+    {v:'stock',    icon:'📦', l:'สต็อก',               page:'stock'},
+    {v:'products', icon:'🏷️', l:'สินค้า',              page:'products'},
+    {v:'sales',    icon:'💰', l:'บันทึกขาย',           page:'sales'},
+    {v:'plan',     icon:'🏭', l:'แผนผลิต',             page:'plan'},
+    {v:'users',    icon:'👥', l:'จัดการผู้ใช้',         page:'users'},
+    {v:'settings', icon:'⚙️', l:'ตั้งค่าระบบ',          page:'settings'},
   ];
-  const visibleTabs = allTabs.filter(t=>t.roles.includes(profile?.role||''));
+  const visibleTabs = allTabs.filter(t => can(t.page));
 
-  // Set default tab by role
+  // Set default tab
   useEffect(()=>{
-    if(!profile) return;
-    if(isWarehouse) setTab('stock');
-    else setTab('report');
-  },[profile]);
+    if(!profile||!permissions) return;
+    const firstTab = allTabs.find(t=>can(t.page));
+    if(firstTab) setTab(firstTab.v);
+  },[profile,permissions]);
 
   if(authLoading) return(
     <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#1B3A2D,#2D5C45)',flexDirection:'column',gap:12,color:'#EFF7F3',fontFamily:"Arial,sans-serif"}}>
@@ -2215,7 +2509,7 @@ export default function App(){
           <div>
             <div style={{fontWeight:700,fontSize:16,letterSpacing:'0.02em'}}>☕ สันติพาณิชย์ Stock</div>
             <div style={{fontSize:11,color:'#7EC4A2',marginTop:2}}>
-              {isAdmin?'👑 Admin':isSales?'💰 Sales':'📦 Warehouse'} · {profile.full_name||profile.email}
+              {{'admin':'👑 Admin','manager':'📊 Manager','sales':'💰 Sales','warehouse':'📦 Warehouse','production':'🏭 Production','accounting':'🧾 Accounting','viewer':'👁️ Viewer'}[profile.role]||profile.role} · {profile.full_name||profile.email}
             </div>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:10}}>
@@ -2236,12 +2530,13 @@ export default function App(){
         </div>
 
         {/* Pages — role-gated */}
-        {tab==='report'  &&(isAdmin||isSales) &&<ReportPage   stock={stock} sales={sales}/>}
-        {tab==='stock'                         &&<StockPage    stock={stock} setStock={setStock} profile={profile}/>}
-        {tab==='products'&&isAdmin             &&<ProductPage  products={products} setProducts={setProducts} stock={stock} setStock={setStock}/>}
-        {tab==='sales'   &&(isAdmin||isSales)  &&<SalesPage    stock={stock} setStock={setStock} setSales={setSales} staff={staff} profile={profile}/>}
-        {tab==='plan'    &&isAdmin             &&<PlanPage     stock={stock} sales={sales}/>}
-        {tab==='users'   &&isAdmin             &&<UserManagePage profile={profile}/>}
+        {tab==='report'  &&can('dashboard') &&<ReportPage   stock={stock} sales={sales} permissions={permissions}/>}
+        {tab==='stock'   &&can('stock')     &&<StockPage    stock={stock} setStock={setStock} canEdit={can('stock','can_edit')} seeCost={can('stock','see_cost')}/>}
+        {tab==='products'&&can('products')  &&<ProductPage  products={products} setProducts={setProducts} stock={stock} setStock={setStock} canEdit={can('products','can_edit')}/>}
+        {tab==='sales'   &&can('sales')     &&<SalesPage    stock={stock} setStock={setStock} setSales={setSales} staff={staff} seeCost={can('sales','see_cost')} seeProfit={can('sales','see_profit')}/>}
+        {tab==='plan'    &&can('plan')      &&<PlanPage     stock={stock} sales={sales}/>}
+        {tab==='users'   &&can('users')     &&<UserManagePage profile={profile}/>}
+        {tab==='settings'&&can('settings')  &&<SettingsPage permissions={permissions} setPermissions={setPermissions} profile={profile}/>}
       </div>
     </div>
   );
