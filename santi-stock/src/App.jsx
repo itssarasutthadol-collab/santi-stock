@@ -46,12 +46,12 @@ const T = {
 };
 
 const S = {
-  wrap:{ maxWidth:1200,margin:'0 auto',padding:'0 12px 80px',fontFamily:"'Noto Sans Thai','Helvetica Neue',Arial,sans-serif",fontSize:13,color:T.text,background:T.bg,minHeight:'100vh' },
+  wrap:{ maxWidth:1200,margin:'0 auto',padding:'0 8px 70px',fontFamily:"'IBM Plex Sans Thai','Noto Sans Thai','Helvetica Neue',Arial,sans-serif",fontSize:13,color:T.text,background:T.bg,minHeight:'100vh' },
   hdr:{ background:T.dark,color:'#FFFFFF',padding:'0 20px',borderRadius:0,marginBottom:0,display:'flex',justifyContent:'space-between',alignItems:'center',boxShadow:'0 2px 12px rgba(176,16,32,0.25)',height:56,position:'sticky',top:0,zIndex:100 },
   nav:{ display:'flex',gap:2,marginBottom:16,marginTop:8,flexWrap:'wrap',padding:'4px',background:T.white,borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:'0 1px 4px rgba(0,0,0,0.08)' },
-  card:{ background:T.white,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:'1.1rem 1.3rem',marginBottom:12,boxShadow:'0 1px 4px rgba(0,0,0,0.06)' },
+  card:{ background:T.white,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:'12px 14px',marginBottom:10,boxShadow:'0 1px 4px rgba(0,0,0,0.06)' },
   cardTitle:{ fontWeight:700,fontSize:12,color:'#1A1A1A',marginBottom:12,display:'flex',alignItems:'center',gap:8,textTransform:'uppercase',letterSpacing:'0.06em',borderLeft:'3px solid #C8102E',paddingLeft:8 },
-  kgrid:{ display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(155px,1fr))',gap:10,marginBottom:14 },
+  kgrid:{ display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:8,marginBottom:12 },
   inp:{ padding:'8px 11px',border:`1.5px solid ${T.borderDark}`,borderRadius:T.radius,fontSize:13,outline:'none',background:T.white,color:T.text,transition:'border-color 0.15s',fontFamily:'inherit' },
   tbl:{ width:'100%',borderCollapse:'separate',borderSpacing:0,fontSize:12 },
   th:{ background:'#C8102E',color:'#FFFFFF',padding:'9px 10px',textAlign:'left',fontWeight:700,fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase' },
@@ -1867,10 +1867,8 @@ function LoginPage({onLogin}){
       <div style={{background:'#fff',borderRadius:8,padding:'44px 40px',width:380,boxShadow:'0 32px 80px rgba(0,0,0,0.35)',position:'relative',zIndex:1}}>
         <div style={{textAlign:'center',marginBottom:32}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:12,marginBottom:12}}>
-            <div style={{width:48,height:48,background:'#C8102E',borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center'}}>
-              <svg viewBox="0 0 100 100" style={{width:36,height:36}}>
-                <text x="50" y="74" textAnchor="middle" fontSize="74" fontFamily="serif" fill="#FFFFFF" fontWeight="bold">ส</text>
-              </svg>
+            <div style={{width:48,height:48,background:'#FFFFFF',borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',border:'2px solid #C8102E'}}>
+              <img src="data:image/png;base64,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" style={{width:42,height:42,objectFit:'contain'}} alt=""/>
             </div>
             <div style={{textAlign:'left'}}>
               <div style={{fontWeight:900,fontSize:20,color:'#1A1A1A',letterSpacing:'0.08em',lineHeight:1.1,fontFamily:"'Helvetica Neue',Arial,sans-serif"}}>SANTI PANICH</div>
@@ -2510,6 +2508,165 @@ function POPage({stock, sales, products}){
         ))}
       </div>
 
+
+      {/* ── Edit Document Modal ─────────────────────────── */}
+      {editOrder&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'20px 12px',overflowY:'auto'}}>
+          <div style={{background:'#fff',borderRadius:T.radius,width:'100%',maxWidth:860,boxShadow:'0 24px 60px rgba(0,0,0,0.3)'}}>
+            {/* Modal header */}
+            <div style={{background:T.dark,color:'#fff',padding:'14px 20px',borderRadius:`${T.radius}px ${T.radius}px 0 0`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:14,letterSpacing:'0.06em'}}>✏️ แก้ไขเอกสาร</div>
+                <div style={{fontSize:11,color:'rgba(255,255,255,0.7)',marginTop:2}}>{editOrder.doc_number} · {TYPE_LABEL[editOrder.doc_type]||editOrder.doc_type}</div>
+              </div>
+              <button onClick={()=>setEditOrder(null)} style={{background:'rgba(255,255,255,0.15)',border:'none',color:'#fff',width:28,height:28,borderRadius:4,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+            </div>
+
+            <div style={{padding:20}}>
+              {editOrder.status==='paid'&&(
+                <div style={{background:'#FEF3C7',border:'1px solid #FCD34D',borderRadius:T.radius,padding:'8px 12px',marginBottom:14,fontSize:12,color:'#B45309'}}>
+                  ⚠️ เอกสารนี้ชำระแล้ว การแก้ไขจะมีผลกับการ reprint เท่านั้น ไม่กระทบสต็อกหรือยอดขาย
+                </div>
+              )}
+
+              {/* Doc type + basic info */}
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'8px 12px',marginBottom:14}}>
+                <div>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:3}}>ประเภทเอกสาร</div>
+                  <select style={{...S.inp,width:'100%'}} value={editDocType} onChange={e=>setEditDocType(e.target.value)}>
+                    {Object.entries(TYPE_LABEL).map(([v,l])=><option key={v} value={v}>{l}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:3}}>กำหนดชำระ</div>
+                  <input type="date" style={{...S.inp,width:'100%'}} value={editDueDate} onChange={e=>setEditDueDate(e.target.value)}/>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:3}}>พนักงานขาย</div>
+                  <input style={{...S.inp,width:'100%'}} value={editStaff} onChange={e=>setEditStaff(e.target.value)}/>
+                </div>
+              </div>
+
+              {/* Customer info */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px 12px',marginBottom:14}}>
+                <div>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:3}}>ชื่อลูกค้า</div>
+                  <input style={{...S.inp,width:'100%'}} value={editCustName} onChange={e=>setEditCustName(e.target.value)}/>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:3}}>เลขผู้เสียภาษีลูกค้า</div>
+                  <input style={{...S.inp,width:'100%'}} value={editCustTax} onChange={e=>setEditCustTax(e.target.value)}/>
+                </div>
+                <div style={{gridColumn:'1/-1'}}>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:3}}>ที่อยู่ลูกค้า</div>
+                  <textarea style={{...S.inp,width:'100%',height:56,resize:'vertical'}} value={editCustAddr} onChange={e=>setEditCustAddr(e.target.value)}/>
+                </div>
+              </div>
+
+              {/* Add product search */}
+              <div style={{marginBottom:10}}>
+                <div style={{fontSize:11,color:T.textMuted,marginBottom:3}}>เพิ่มสินค้า</div>
+                <input style={{...S.inp,width:'100%'}} placeholder="พิมพ์ชื่อสินค้า/SKU เพื่อเพิ่มรายการ" value={editKw} onChange={e=>setEditKw(e.target.value)}/>
+                {editKw.trim()&&(()=>{
+                  const words=editKw.toLowerCase().split(/\s+/).filter(Boolean);
+                  const sugs=PR.filter(p=>words.every(w=>(p[0]+' '+p[1]).toLowerCase().includes(w))).slice(0,8);
+                  return sugs.length>0?(
+                    <div style={{display:'flex',flexWrap:'wrap',gap:5,marginTop:6}}>
+                      {sugs.map(p=>(
+                        <button key={p[0]} style={{padding:'4px 9px',border:`1px solid ${T.border}`,borderRadius:T.radius,background:T.grayLight,cursor:'pointer',fontSize:11}} onClick={()=>{
+                          setEditItems(items=>{
+                            const ex=items.find(x=>x.sku===p[0]);
+                            if(ex) return items.map(x=>x.sku===p[0]?{...x,qty:x.qty+1}:x);
+                            return [...items,{sku:p[0],name:p[1],cat:p[2],qty:1,sell:p[3],unit_price:p[3],discount_pct:0,cost:stock[p[0]]?.cost||p[4],subtotal:p[3]}];
+                          });
+                          setEditKw('');
+                        }}>{p[1]} <span style={{color:T.green}}>฿{fmt(p[3])}</span></button>
+                      ))}
+                    </div>
+                  ):null;
+                })()}
+              </div>
+
+              {/* Items table */}
+              <div style={{...S.tow,marginBottom:12}}>
+                <table style={S.tbl}>
+                  <thead><tr>
+                    {['ชื่อสินค้า','ราคา/หน่วย','ส่วนลด%','จำนวน','รวม',''].map((h,i)=><th key={i} style={S.th}>{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {editItems.map((it,i)=>(
+                      <tr key={it.sku||i}>
+                        <td style={tdr(i)}>
+                          <div style={{fontWeight:500}}>{it.name}</div>
+                          <div style={{fontSize:10,color:T.textMuted}}>{it.sku}</div>
+                        </td>
+                        <td style={tdr(i)}>
+                          <input type="number" min="0" step="0.01" style={{...S.inp,width:85,padding:'3px 6px'}} value={it.sell||0}
+                            onChange={e=>setEditItems(items=>items.map((x,j)=>j===i?{...x,sell:parseFloat(e.target.value)||0,subtotal:(parseFloat(e.target.value)||0)*x.qty*(1-(x.discount_pct||0)/100)}:x))}/>
+                        </td>
+                        <td style={tdr(i)}>
+                          <input type="number" min="0" max="100" step="0.5" style={{...S.inp,width:60,padding:'3px 6px'}} value={it.discount_pct||0}
+                            onChange={e=>setEditItems(items=>items.map((x,j)=>j===i?{...x,discount_pct:parseFloat(e.target.value)||0,subtotal:x.sell*x.qty*(1-(parseFloat(e.target.value)||0)/100)}:x))}/>
+                        </td>
+                        <td style={tdr(i)}>
+                          <input type="number" min="1" style={{...S.inp,width:60,padding:'3px 6px',textAlign:'center'}} value={it.qty||1}
+                            onChange={e=>setEditItems(items=>items.map((x,j)=>j===i?{...x,qty:Math.max(1,parseInt(e.target.value)||1),subtotal:x.sell*(Math.max(1,parseInt(e.target.value)||1))*(1-(x.discount_pct||0)/100)}:x))}/>
+                        </td>
+                        <td style={{...tdr(i),fontWeight:500}}>฿{fmt((it.sell||0)*(it.qty||1)*(1-(it.discount_pct||0)/100))}</td>
+                        <td style={tdr(i)}>
+                          <button style={{background:'none',border:'none',color:T.red,cursor:'pointer',fontSize:18,lineHeight:1}} onClick={()=>setEditItems(items=>items.filter((_,j)=>j!==i))}>×</button>
+                        </td>
+                      </tr>
+                    ))}
+                    {editItems.length===0&&<tr><td colSpan={6} style={{padding:20,textAlign:'center',color:T.textMuted,fontSize:12}}>ไม่มีรายการ — เพิ่มสินค้าด้านบน</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Summary + discount + note */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px 16px',marginBottom:16}}>
+                <div>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:3}}>ส่วนลดรวม (฿)</div>
+                  <input type="number" min="0" style={{...S.inp,width:'100%'}} value={editDisc} onChange={e=>setEditDisc(e.target.value)} placeholder="0"/>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:3,marginTop:8}}>หมายเหตุ</div>
+                  <input style={{...S.inp,width:'100%'}} value={editNote} onChange={e=>setEditNote(e.target.value)} placeholder="หมายเหตุ..."/>
+                </div>
+                <div style={{background:T.grayLight,borderRadius:T.radius,padding:'12px 14px'}}>
+                  {(()=>{
+                    const disc=parseFloat(editDisc)||0;
+                    const sub=editItems.reduce((s,x)=>s+(x.sell||0)*(x.qty||1)*(1-(x.discount_pct||0)/100),0);
+                    const afterD=Math.max(0,sub-disc);
+                    const vat=editOrder.vat_amount>0?afterD*0.07:0;
+                    const total=afterD+vat;
+                    return(<>
+                      <div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'2px 0'}}><span>ราคารวม</span><span>฿{fmt(sub)}</span></div>
+                      {disc>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'2px 0',color:T.red}}><span>ส่วนลด</span><span>-฿{fmt(disc)}</span></div>}
+                      {vat>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'2px 0',color:T.amber}}><span>VAT 7%</span><span>฿{fmt(vat)}</span></div>}
+                      <div style={{display:'flex',justifyContent:'space-between',fontWeight:700,fontSize:18,marginTop:8,paddingTop:8,borderTop:`2px solid ${T.border}`,color:T.dark}}><span>รวม</span><span>฿{fmt(total)}</span></div>
+                    </>);
+                  })()}
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                <button style={btn('gy')} onClick={()=>setEditOrder(null)}>ยกเลิก</button>
+                <button style={btn('dk')} onClick={()=>{
+                  const disc=parseFloat(editDisc)||0;
+                  const sub=editItems.reduce((s,x)=>s+(x.sell||0)*(x.qty||1)*(1-(x.discount_pct||0)/100),0);
+                  const afterD=Math.max(0,sub-disc);
+                  const vat=editOrder.vat_amount>0?afterD*0.07:0;
+                  const total=afterD+vat;
+                  printDoc({...editOrder,doc_type:editDocType,customer_name:editCustName,customer_address:editCustAddr,customer_tax_id:editCustTax,items:editItems,subtotal:sub,discount_amount:disc,after_discount:afterD,vat_amount:vat,total,note:editNote,due_date:editDueDate,staff_name:editStaff});
+                }} disabled={editSaving}>🖨️ Preview & พิมพ์</button>
+                <button style={btn('gr')} onClick={saveEdit} disabled={editSaving}>
+                  {editSaving?'กำลังบันทึก...':'💾 บันทึก + พิมพ์'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {tab==='create'&&(
         <div>
           {msg&&<div style={{...S.card,background:msg.startsWith('✅')?T.greenLight:T.redLight,color:msg.startsWith('✅')?T.green:T.red,fontWeight:500,marginBottom:12}}>{msg}</div>}
@@ -2673,6 +2830,19 @@ function OrdersPage({stock, setStock, setSales}){
   const [loading,   setLoading]  = useState(true);
   const [saving,    setSaving]   = useState(false);
   const [msg,       setMsg]      = useState('');
+  // Edit modal
+  const [editOrder, setEditOrder] = useState(null);  // order being edited
+  const [editItems, setEditItems] = useState([]);
+  const [editCustName,  setEditCustName]  = useState('');
+  const [editCustAddr,  setEditCustAddr]  = useState('');
+  const [editCustTax,   setEditCustTax]   = useState('');
+  const [editDisc,      setEditDisc]      = useState('');
+  const [editNote,      setEditNote]      = useState('');
+  const [editDueDate,   setEditDueDate]   = useState('');
+  const [editDocType,   setEditDocType]   = useState('quotation');
+  const [editStaff,     setEditStaff]     = useState('');
+  const [editKw,        setEditKw]        = useState('');
+  const [editSaving,    setEditSaving]    = useState(false);
 
   // Filter
   const [filterPeriod, setFilterPeriod] = useState('this_month');
@@ -2707,6 +2877,57 @@ function OrdersPage({stock, setStock, setSales}){
       .select('*').order('created_at',{ascending:false}).limit(500);
     setOrders(data||[]);
     setLoading(false);
+  };
+
+  const openEdit = (o) => {
+    setEditOrder(o);
+    setEditItems((o.items||[]).map(it=>({...it})));
+    setEditCustName(o.customer_name||'');
+    setEditCustAddr(o.customer_address||'');
+    setEditCustTax(o.customer_tax_id||'');
+    setEditDisc(String(o.discount_amount||0));
+    setEditNote(o.note||'');
+    setEditDueDate(o.due_date||'');
+    setEditDocType(o.doc_type||'quotation');
+    setEditStaff(o.staff_name||'');
+    setEditKw('');
+  };
+
+  const saveEdit = async () => {
+    if(!editOrder) return;
+    setEditSaving(true);
+    const disc = parseFloat(editDisc)||0;
+    const subtotal = editItems.reduce((s,x)=>s+(x.sell||0)*(x.qty||0)*(1-(x.discount_pct||0)/100),0);
+    const afterD = Math.max(0, subtotal-disc);
+    const vatAmt = editOrder.vat_amount>0 ? afterD*0.07 : 0;
+    const grand  = afterD+vatAmt;
+
+    const updated = {
+      doc_type:         editDocType,
+      customer_name:    editCustName,
+      customer_address: editCustAddr,
+      customer_tax_id:  editCustTax,
+      items:            editItems,
+      subtotal,
+      discount_amount:  disc,
+      after_discount:   afterD,
+      vat_amount:       vatAmt,
+      total:            grand,
+      note:             editNote,
+      due_date:         editDueDate||null,
+      staff_name:       editStaff,
+      updated_at:       new Date().toISOString(),
+    };
+    const {error} = await supabase.from('sales_orders').update(updated).eq('id', editOrder.id);
+    if(error){ setMsg('❌ '+error.message); setEditSaving(false); return; }
+    // Update local state
+    const newOrder = {...editOrder, ...updated};
+    setOrders(prev=>prev.map(o=>o.id===editOrder.id ? newOrder : o));
+    setMsg('✅ แก้ไขเอกสาร '+editOrder.doc_number+' เรียบร้อย');
+    setEditSaving(false);
+    setEditOrder(null);
+    // Auto print updated doc
+    setTimeout(()=>printDoc(newOrder), 300);
   };
 
   // Filter orders by period
@@ -2960,8 +3181,9 @@ function OrdersPage({stock, setStock, setSales}){
                           </td>
                           <td style={tdr(i)}>
                             <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                              <button style={btn('dk',{padding:'3px 8px',fontSize:11})} onClick={()=>printDoc(o)}>🖨️</button>
-                              <button style={btn('out',{padding:'3px 8px',fontSize:11})} onClick={()=>printDoc(o,true)}>สำเนา</button>
+                              <button style={btn('dk',{padding:'3px 8px',fontSize:11})} onClick={()=>printDoc(o)} title="พิมพ์">🖨️</button>
+                              <button style={btn('out',{padding:'3px 8px',fontSize:11})} onClick={()=>printDoc(o,true)} title="สำเนา">สำเนา</button>
+                              <button style={btn('am',{padding:'3px 8px',fontSize:11})} onClick={()=>openEdit(o)} title="แก้ไขเอกสาร">✏️ แก้ไข</button>
                               {o.status==='draft'&&<button style={btn('bl',{padding:'3px 8px',fontSize:11})} onClick={()=>{supabase.from('sales_orders').update({status:'sent'}).eq('id',o.id).then(()=>setOrders(prev=>prev.map(x=>x.id===o.id?{...x,status:'sent'}:x)));setMsg('✅ อัพเดทสถานะแล้ว');}}>ส่งแล้ว</button>}
                               {o.status==='sent'&&<button style={btn('gr',{padding:'3px 8px',fontSize:11})} onClick={()=>markPaid(o)}>💰 ชำระแล้ว</button>}
                               {o.status==='paid'&&<button style={btn('dk',{padding:'3px 8px',fontSize:11})} onClick={()=>printDoc({...o,doc_type:'tax_invoice'})}>ใบกำกับ</button>}
@@ -3742,10 +3964,8 @@ export default function App(){
 
   if(authLoading) return(
     <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#C8102E',flexDirection:'column',gap:16,fontFamily:"Arial,sans-serif"}}>
-      <div style={{width:56,height:56,background:'#FFFFFF',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center'}}>
-        <svg viewBox="0 0 100 100" style={{width:44,height:44}}>
-          <text x="50" y="74" textAnchor="middle" fontSize="74" fontFamily="serif" fill="#C8102E" fontWeight="bold">ส</text>
-        </svg>
+      <div style={{width:56,height:56,background:'#FFFFFF',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden'}}>
+        <img src="data:image/png;base64,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" style={{width:48,height:48,objectFit:'contain'}} alt=""/>
       </div>
       <div style={{color:'#FFFFFF',fontSize:12,letterSpacing:'0.12em',fontWeight:600}}>SANTI PANICH</div>
       <div style={{color:'rgba(255,255,255,0.7)',fontSize:11,letterSpacing:'0.06em'}}>กำลังโหลด...</div>
@@ -3756,10 +3976,8 @@ export default function App(){
 
   if(loading) return(
     <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,fontFamily:"Arial,sans-serif",background:'#fafafa'}}>
-      <div style={{width:48,height:48,background:'#C8102E',borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center'}}>
-        <svg viewBox="0 0 100 100" style={{width:36,height:36}}>
-          <text x="50" y="74" textAnchor="middle" fontSize="74" fontFamily="serif" fill="#FFFFFF" fontWeight="bold">ส</text>
-        </svg>
+      <div style={{width:48,height:48,background:'#FFFFFF',borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',border:'2px solid #C8102E'}}>
+        <img src="data:image/png;base64,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" style={{width:44,height:44,objectFit:'contain'}} alt=""/>
       </div>
       <div style={{color:'#1A1A1A',fontSize:12,letterSpacing:'0.1em',fontWeight:700}}>SANTI PANICH</div>
       <div style={{color:'#888',fontSize:11}}>กำลังโหลดข้อมูล...</div>
@@ -3774,14 +3992,12 @@ export default function App(){
         <div style={S.hdr}>
           <div style={{display:'flex',alignItems:'center',gap:12}}>
             <div style={{display:'flex',alignItems:'center',gap:10}}>
-              <div style={{width:36,height:36,background:'#FFFFFF',borderRadius:4,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                <svg viewBox="0 0 100 100" style={{width:28,height:28}}>
-                  <text x="50" y="74" textAnchor="middle" fontSize="74" fontFamily="serif" fill="#C8102E" fontWeight="bold">ส</text>
-                </svg>
+              <div style={{width:36,height:36,background:'#FFFFFF',borderRadius:4,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,overflow:'hidden'}}>
+                <img src="data:image/png;base64,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" style={{width:32,height:32,objectFit:'contain'}} alt=""/>
               </div>
               <div>
                 <div style={{fontWeight:800,fontSize:14,letterSpacing:'0.1em',color:'#FFFFFF',fontFamily:"'Helvetica Neue',Arial,sans-serif",lineHeight:1.1}}>SANTI PANICH</div>
-                <div style={{fontSize:9,color:'rgba(255,255,255,0.65)',letterSpacing:'0.14em',fontWeight:500,marginTop:1}}>COFFEE ROASTER · STOCK</div>
+                <div style={{fontSize:9,color:'rgba(255,255,255,0.65)',letterSpacing:'0.14em',fontWeight:500,marginTop:1,display:'none'}} className="hide-mobile-sm">COFFEE ROASTER · STOCK</div>
               </div>
             </div>
           </div>
@@ -3811,9 +4027,9 @@ export default function App(){
         {/* Nav — only show allowed tabs */}
         <div style={S.nav}>
           {visibleTabs.map(t=>(
-            <button key={t.v} style={{...nbtn(tab===t.v),display:'flex',alignItems:'center',gap:5,flex:1,justifyContent:'center',fontSize:12,padding:'8px 6px'}} onClick={()=>setTab(t.v)}>
-              <span style={{fontSize:14}}>{t.icon}</span>
-              <span style={{display:'inline'}}>{t.l}</span>
+            <button key={t.v} style={{...nbtn(tab===t.v),display:'flex',alignItems:'center',gap:4,flex:1,justifyContent:'center',fontSize:11,padding:'8px 4px',minWidth:0}} onClick={()=>setTab(t.v)}>
+              <span style={{fontSize:14,flexShrink:0}}>{t.icon}</span>
+              <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{t.l}</span>
             </button>
           ))}
         </div>
