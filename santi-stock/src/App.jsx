@@ -644,7 +644,7 @@ function SalesPage({stock, setStock, setSales, sales, staff, seeCost, seeProfit}
   const [editSaving,   setEditSaving]   = useState(false);
   const [editKw,       setEditKw]       = useState('');
   // ── Filters ───────────────────────────────────────────────
-  const [filterPeriod, setFilterPeriod] = useState('this_month');
+  const [filterPeriod, setFilterPeriod] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterType,   setFilterType]   = useState('all');
   const [quickMonth,   setQuickMonth]   = useState(()=>{
@@ -907,7 +907,8 @@ function SalesPage({stock, setStock, setSales, sales, staff, seeCost, seeProfit}
     return orders.filter(o=>{
       const d=new Date(o.created_at);
       let inP=true;
-      if(filterPeriod==='today')         inP=d>=today;
+      if(filterPeriod==='all')           inP=true;
+      else if(filterPeriod==='today')    inP=d>=today;
       else if(filterPeriod==='this_month') inP=d>=monthStart;
       else if(filterPeriod==='last_month') inP=d>=lastMonth&&d<=lastMonthEnd;
       else if(filterPeriod==='this_year')  inP=d>=yearStart;
@@ -1140,7 +1141,7 @@ function SalesPage({stock, setStock, setSales, sales, staff, seeCost, seeProfit}
           {/* Filters */}
           <div style={S.card}>
             <div style={{...S.row,gap:6,flexWrap:'wrap',marginBottom:8}}>
-              {[['today','วันนี้'],['this_month','เดือนนี้'],['last_month','เดือนที่แล้ว'],['this_year','ปีนี้'],['month_pick','เลือกเดือน'],['custom','กำหนดเอง']].map(([v,l])=>(
+              {[['all','ทั้งหมด'],['today','วันนี้'],['this_month','เดือนนี้'],['last_month','เดือนที่แล้ว'],['this_year','ปีนี้'],['month_pick','เลือกเดือน'],['custom','กำหนดเอง']].map(([v,l])=>(
                 <button key={v} style={nbtn(filterPeriod===v)} onClick={()=>setFilterPeriod(v)}>{l}</button>
               ))}
             </div>
@@ -3306,16 +3307,11 @@ function InventoryPage({products,setProducts,stock,setStock,can}){
 // SELLING PAGE — ขาย & เอกสาร (sub-tabs)
 // ════════════════════════════════════════════════════════
 function SellingPage({stock,setStock,setSales,sales,staff,can}){
-  const [sub,setSub] = useState('quick');
   return(
-    <div>
-      <div style={{display:'flex',gap:6,marginBottom:12,background:T.white,padding:'5px',borderRadius:T.radius,border:`1px solid ${T.border}`}}>
-        {can('sales')  &&<button style={{...nbtn(sub==='quick'),flex:1,textAlign:'center'}} onClick={()=>setSub('quick')}>⚡ บันทึกขายด่วน</button>}
-        {can('orders') &&<button style={{...nbtn(sub==='orders'),flex:1,textAlign:'center'}} onClick={()=>setSub('orders')}>📋 ใบเสนอราคา / ใบแจ้งหนี้ / ใบเสร็จ</button>}
-      </div>
-      {sub==='quick'  &&can('sales')  &&<SalesPage  stock={stock} setStock={setStock} setSales={setSales} staff={staff} seeCost={can('sales','see_cost')} seeProfit={can('sales','see_profit')}/>}
-      {sub==='orders' &&can('orders') &&<OrdersPage stock={stock} setStock={setStock} setSales={setSales}/>}
-    </div>
+    <SalesPage
+      stock={stock} setStock={setStock} setSales={setSales} sales={sales} staff={staff}
+      seeCost={can('sales','see_cost')} seeProfit={can('sales','see_profit')}
+    />
   );
 }
 
