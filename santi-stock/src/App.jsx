@@ -1094,8 +1094,8 @@ function SalesPage({stock,setStock,setSales,staff=[],profile}){
             {msg&&<div style={{marginTop:10,padding:'9px 12px',borderRadius:T.radius,fontSize:12,background:msg.startsWith('✅')?T.greenLight:T.redLight,color:msg.startsWith('✅')?T.green:T.red,fontWeight:500}}>{msg}</div>}
             {lastSale&&(
               <div style={{marginTop:10,display:'flex',gap:8}}>
-                <button style={{...btn('dk'),flex:1,fontSize:12}} onClick={()=>printReceipt(lastSale)}>🖨️ พิมพ์ใบเสร็จ</button>
-                <button style={{...btn('bl'),flex:1,fontSize:12}} onClick={()=>printTaxInvoice(lastSale)}>🧾 ใบกำกับภาษี</button>
+                <button style={{...btn('dk'),flex:1,fontSize:12}} onClick={()=>printDoc({...lastSale,doc_type:'receipt'})}>🖨️ ใบเสร็จ</button>
+                <button style={{...btn('bl'),flex:1,fontSize:12}} onClick={()=>printDoc({...lastSale,doc_type:'tax_invoice'})}>🧾 ใบกำกับภาษี</button>
               </div>
             )}
           </div>
@@ -2106,6 +2106,258 @@ function UserManagePage({profile}){
   );
 }
 
+
+// ════════════════════════════════════════════════════════
+// A4 DOCUMENT PRINTER — ใบเสร็จ/ใบกำกับภาษี/ใบแจ้งหนี้/ใบเสนอราคา
+// ════════════════════════════════════════════════════════
+const CO = {
+  name:    'บริษัท สันติพาณิชย์ โรสเตอร์ จำกัด',
+  address: '29/35 หมู่ที่ 6 ตำบลโคกแย้ อำเภอหนองแค จังหวัดสระบุรี 18230',
+  address_en: '29/35 M.6 T.Kokyae A.Nongkhae Saraburi',
+  tel:     '095-356-2974',
+  email:   'SANTICOFFEEANDROASTER@GMAIL.COM',
+  website: 'www.santipanich.com',
+  tax_id:  '0-1955-61000-94-1',
+  bank_name:   'ธนาคารกสิกรไทย',
+  bank_name_en:'Bank Kasikornbank Public Company Limited',
+  bank_acct:   '0433209974',
+  bank_acct_name:   'บริษัท สันติพาณิชย์โรสเตอร์จำกัด',
+  bank_acct_name_en:'SANTIPANICH Roaster CO.,LTD.',
+};
+
+const DOC_LABELS = {
+  quotation:   { th:'ใบเสนอราคา',              en:'Quotation',           prefix:'QT' },
+  invoice:     { th:'ใบแจ้งหนี้',               en:'Invoice',             prefix:'IN' },
+  receipt:     { th:'ใบเสร็จรับเงิน',           en:'Receipt',             prefix:'RC' },
+  tax_invoice: { th:'ใบกำกับภาษี/ใบแจ้งหนี้/ใบเสร็จรับเงิน', en:'Tax Invoice/Invoice/Receipt', prefix:'TX' },
+};
+
+function bahtText(amount) {
+  const ones = ['','หนึ่ง','สอง','สาม','สี่','ห้า','หก','เจ็ด','แปด','เก้า'];
+  const tens = ['','สิบ','ยี่สิบ','สามสิบ','สี่สิบ','ห้าสิบ','หกสิบ','เจ็ดสิบ','แปดสิบ','เก้าสิบ'];
+  const places = ['','หมื่น','พัน','ร้อย','สิบ',''];
+  if(amount===0) return 'ศูนย์บาทถ้วน';
+  const [intPart,decPart] = amount.toFixed(2).split('.');
+  const n = parseInt(intPart);
+  if(n===0&&parseInt(decPart)===0) return 'ศูนย์บาทถ้วน';
+  const digits = intPart.split('').reverse();
+  let result = '';
+  for(let i=0;i<digits.length;i++){
+    const d = parseInt(digits[i]);
+    if(d===0) continue;
+    if(i===1&&d===1) result = 'สิบ'+result;
+    else if(i===1) result = tens[d]+result;
+    else result = ones[d]+(i<6?['','หมื่น','พัน','ร้อย','สิบ',''][5-i%6<0?0:5-i%6]||'':'')+result;
+  }
+  result += 'บาท';
+  const dec = parseInt(decPart);
+  if(dec===0) result += 'ถ้วน';
+  else {
+    const d1=Math.floor(dec/10), d2=dec%10;
+    if(d1>0) result += tens[d1];
+    if(d2>0) result += ones[d2];
+    result += 'สตางค์';
+  }
+  return result;
+}
+
+function buildDocHTML(order, isCopy=false) {
+  const label = DOC_LABELS[order.doc_type] || DOC_LABELS.invoice;
+  const issueDate = new Date(order.created_at||Date.now()).toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const dueDate   = order.due_date ? new Date(order.due_date).toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'numeric'}) : issueDate;
+  const items     = order.items||[];
+  const subtotal  = order.subtotal||0;
+  const discAmt   = order.discount_amount||0;
+  const afterDisc = order.after_discount||subtotal-discAmt;
+  const vatAmt    = order.vat_amount||0;
+  const total     = order.total||afterDisc+vatAmt;
+  const showBank  = ['receipt','tax_invoice'].includes(order.doc_type) || order.status==='paid';
+
+  const itemRows = items.map((it,i) => `
+    <tr>
+      <td style="text-align:center;padding:6px 8px;border-bottom:1px solid #eee">${i+1}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee">${it.name||it.description||''}</td>
+      <td style="text-align:center;padding:6px 8px;border-bottom:1px solid #eee">${it.qty||0}</td>
+      <td style="text-align:right;padding:6px 8px;border-bottom:1px solid #eee">${Number(it.sell||it.unit_price||0).toFixed(2)}</td>
+      <td style="text-align:right;padding:6px 8px;border-bottom:1px solid #eee">${it.discount_pct?it.discount_pct.toFixed(2)+' %':'0.00 %'}</td>
+      <td style="text-align:right;padding:6px 8px;border-bottom:1px solid #eee">${Number(it.subtotal||(it.qty||0)*(it.sell||0)).toFixed(2)}</td>
+    </tr>
+  `).join('');
+
+  return `<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${label.en} ${order.doc_number||''}</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'Noto Sans Thai',Arial,sans-serif; font-size:12px; color:#1a1a1a; background:#fff; }
+  .page { width:210mm; min-height:297mm; margin:0 auto; padding:12mm 14mm; position:relative; }
+  .header { display:flex; justify-content:space-between; margin-bottom:8px; }
+  .logo-area { width:45%; }
+  .logo-text { font-size:18px; font-weight:700; color:#1B3A2D; margin-bottom:2px; }
+  .co-info { font-size:9.5px; color:#444; line-height:1.6; }
+  .doc-area { width:50%; text-align:right; }
+  .doc-type-box { border:2px solid #1B3A2D; padding:6px 12px; display:inline-block; margin-bottom:6px; }
+  .doc-type-th { font-size:14px; font-weight:700; color:#1B3A2D; }
+  .doc-type-en { font-size:11px; color:#444; }
+  .doc-num  { font-size:13px; font-weight:700; color:#1B3A2D; margin-top:4px; }
+  .original-tag { font-size:10px; border:1px solid #666; padding:1px 6px; display:inline-block; margin-top:3px; }
+  .customer-section { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:8px 0; border:1px solid #ddd; padding:8px 10px; border-radius:4px; }
+  .field-row { display:flex; gap:6px; margin-bottom:3px; font-size:11px; }
+  .field-label { color:#666; white-space:nowrap; min-width:80px; }
+  .field-value { font-weight:500; color:#1a1a1a; }
+  .items-table { width:100%; border-collapse:collapse; margin:8px 0; }
+  .items-table thead th { background:#1B3A2D; color:#EFF7F3; padding:7px 8px; font-size:11px; }
+  .items-table tbody tr:nth-child(even) td { background:#f9f9f9; }
+  .empty-rows td { height:28px; border-bottom:1px solid #eee; }
+  .totals-section { display:flex; justify-content:space-between; margin-top:6px; }
+  .payment-section { width:55%; font-size:11px; }
+  .payment-title { font-weight:600; margin-bottom:4px; font-size:12px; }
+  .payment-methods { display:flex; gap:12px; margin-bottom:6px; }
+  .chk { display:inline-flex; align-items:center; gap:3px; }
+  .bank-info { font-size:10.5px; color:#333; line-height:1.7; border:1px solid #ddd; padding:6px 8px; border-radius:3px; margin-top:4px; background:#f9f9f9; }
+  .totals-table { width:42%; border-collapse:collapse; }
+  .totals-table td { padding:4px 8px; font-size:12px; border-bottom:1px solid #f0f0f0; }
+  .totals-table td:last-child { text-align:right; font-weight:500; }
+  .total-final td { font-size:14px; font-weight:700; color:#1B3A2D; border-top:2px solid #1B3A2D; padding-top:6px; }
+  .baht-text { font-size:11px; font-weight:600; margin-top:4px; }
+  .sig-section { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-top:16px; }
+  .sig-box { text-align:center; font-size:10px; }
+  .sig-line { border-bottom:1px dashed #999; margin:20px 10px 4px; }
+  .footer-addr { text-align:center; font-size:9.5px; color:#666; margin-top:12px; border-top:1px solid #eee; padding-top:6px; }
+  .no-print { text-align:center; margin-top:16px; padding:12px; border-top:2px dashed #ddd; }
+  @media print {
+    body { margin:0; }
+    .page { width:100%; padding:8mm 10mm; }
+    .no-print { display:none; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <!-- Header -->
+  <div class="header">
+    <div class="logo-area">
+      <div class="logo-text">☕ SANTI PANICH</div>
+      <div class="co-info">
+        <strong>${CO.name}</strong><br>
+        ${CO.address}<br>
+        เลขที่ผู้เสียภาษี ${CO.tax_id} | (สำนักงานใหญ่)<br>
+        โทร: ${CO.tel} | ${CO.email}<br>
+        ${CO.website}
+      </div>
+    </div>
+    <div class="doc-area">
+      <div class="doc-type-box">
+        <div class="doc-type-th">${label.th}</div>
+        <div class="doc-type-en">${label.en}</div>
+      </div>
+      <div class="original-tag">${isCopy?'สำเนา / Copy':'ต้นฉบับ / Original'}</div>
+      <div class="doc-num">${order.doc_number||''}</div>
+      <div style="font-size:9px;color:#888">(เอกสารออกเป็นชุด)</div>
+    </div>
+  </div>
+
+  <!-- Customer Info -->
+  <div class="customer-section">
+    <div>
+      <div class="field-row"><span class="field-label">ชื่อลูกค้า<br>Customer Name</span><span class="field-value">${order.customer_name||'-'}</span></div>
+      <div class="field-row"><span class="field-label">เลขที่ผู้เสียภาษี<br>Tax ID</span><span class="field-value">${order.customer_tax_id||(order.customer_tax_id?'(สำนักงานใหญ่)':'')}</span></div>
+      <div class="field-row"><span class="field-label">ที่อยู่<br>Address</span><span class="field-value">${order.customer_address||'-'}</span></div>
+    </div>
+    <div>
+      <div class="field-row"><span class="field-label">วันที่ / Issue Date</span><span class="field-value">${issueDate}</span></div>
+      <div class="field-row"><span class="field-label">กำหนดชำระ / Due Date</span><span class="field-value">${dueDate}</span></div>
+      <div class="field-row"><span class="field-label">พนักงานขาย / Salesman</span><span class="field-value">${order.staff_name||'-'}</span></div>
+      ${order.ref_doc?`<div class="field-row"><span class="field-label">อ้างอิง / Ref</span><span class="field-value">${order.ref_doc}</span></div>`:''}
+    </div>
+  </div>
+
+  <!-- Items Table -->
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th style="width:5%;text-align:center">เลขที่<br>No.</th>
+        <th style="text-align:left">รายการ<br>Description</th>
+        <th style="width:8%;text-align:center">จำนวน<br>Qty</th>
+        <th style="width:12%;text-align:right">ราคา/หน่วย<br>Unit Price</th>
+        <th style="width:10%;text-align:right">ส่วนลด<br>Discount</th>
+        <th style="width:14%;text-align:right">จำนวนเงิน (THB)<br>Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${itemRows}
+      ${Array(Math.max(0,8-items.length)).fill('<tr class="empty-rows"><td></td><td></td><td></td><td></td><td></td><td></td></tr>').join('')}
+    </tbody>
+  </table>
+
+  <!-- Totals -->
+  <div class="totals-section">
+    <div class="payment-section">
+      <div class="baht-text">จำนวนเงิน / Amount<br>${bahtText(total)}</div>
+      <div class="payment-title" style="margin-top:10px">การชำระเงิน (Conditions of Payments)</div>
+      <div class="payment-methods">
+        <span class="chk"><input type="checkbox" ${order.payment_method==='cash'?'checked':''} readonly> <span>เงินสด / Cash</span></span>
+        <span class="chk"><input type="checkbox" ${order.payment_method==='transfer'?'checked':''} readonly> <span>โอนเงิน / Bank Transfer</span></span>
+        <span class="chk"><input type="checkbox" ${order.payment_method==='cheque'?'checked':''} readonly> <span>เช็คธนาคาร / Cheque Bank</span></span>
+      </div>
+      ${order.payment_note?`<div style="font-size:10.5px;color:#333;margin-bottom:4px">รายละเอียด: ${order.payment_note}</div>`:''}
+      ${showBank?`<div class="bank-info">
+        บัญชีโอนเงิน<br>
+        ${CO.bank_name} / ${CO.bank_name_en}<br>
+        ชื่อบัญชี ${CO.bank_acct_name}<br>
+        ${CO.bank_acct_name_en}<br>
+        เลขที่บัญชี ${CO.bank_acct}
+      </div>`:''}
+    </div>
+    <table class="totals-table">
+      <tr><td>รวมเป็นเงิน / Subtotal</td><td>${subtotal.toFixed(2)}</td></tr>
+      <tr><td>หักส่วนลดพิเศษ / Special Discount</td><td>${discAmt.toFixed(2)}</td></tr>
+      <tr><td>ยอดรวมหลังหักส่วนลด / After Discount</td><td>${afterDisc.toFixed(2)}</td></tr>
+      <tr><td>จำนวนภาษีมูลค่าเพิ่ม 7% / VAT</td><td>${vatAmt.toFixed(2)}</td></tr>
+      <tr class="total-final"><td>จำนวนเงินรวมทั้งสิ้น / Total</td><td>${total.toFixed(2)}</td></tr>
+    </table>
+  </div>
+
+  <!-- Signatures -->
+  <div class="sig-section">
+    <div class="sig-box">
+      <div class="sig-line"></div>
+      ผู้รับสินค้า / Receiver Signature<br>
+      วันที่ / Date _______________
+    </div>
+    <div class="sig-box" style="font-weight:600;font-size:11px;color:#1B3A2D">
+      <div class="sig-line"></div>
+      ${CO.name}
+    </div>
+    <div class="sig-box">
+      <div class="sig-line"></div>
+      ผู้มีอำนาจลงนาม / Authorized Signature<br>
+      วันที่ / Date _______________
+    </div>
+  </div>
+
+  <div class="footer-addr">${CO.address_en}</div>
+
+  <div class="no-print">
+    <button onclick="window.print()" style="padding:10px 28px;background:#1B3A2D;color:#EFF7F3;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-family:inherit;margin-right:8px">🖨️ พิมพ์ / บันทึก PDF</button>
+    <button onclick="window.close()" style="padding:10px 20px;background:#eee;color:#333;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-family:inherit">ปิด</button>
+  </div>
+</div>
+</body>
+</html>`;
+}
+
+function printDoc(order, isCopy=false) {
+  const html = buildDocHTML(order, isCopy);
+  const w = window.open('', '_blank', 'width=900,height:750');
+  w.document.write(html);
+  w.document.close();
+}
+
+
 // ════════════════════════════════════════════════════════
 // PO PAGE — ระบบสั่งซื้อสินค้า
 // ════════════════════════════════════════════════════════
@@ -2392,6 +2644,445 @@ function POPage({stock, sales, products}){
               </div>
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ════════════════════════════════════════════════════════
+// ORDERS PAGE — ใบเสนอราคา/ใบแจ้งหนี้/ใบเสร็จ/ใบกำกับภาษี
+// ════════════════════════════════════════════════════════
+function OrdersPage({stock, setStock, setSales}){
+  const [tab,       setTab]      = useState('list');
+  const [orders,    setOrders]   = useState([]);
+  const [loading,   setLoading]  = useState(true);
+  const [saving,    setSaving]   = useState(false);
+  const [msg,       setMsg]      = useState('');
+
+  // Filter
+  const [filterPeriod, setFilterPeriod] = useState('this_month');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterType,   setFilterType]   = useState('all');
+  const [customStart,  setCustomStart]  = useState('');
+  const [customEnd,    setCustomEnd]    = useState('');
+  const [quickMonth,   setQuickMonth]   = useState(()=>{
+    const n=new Date(); return n.getFullYear()+'-'+(n.getMonth()+1).toString().padStart(2,'0');
+  });
+
+  // New order form
+  const [kw,          setKw]        = useState('');
+  const [cart,        setCart]      = useState([]);
+  const [customer,    setCustomer]  = useState(null);
+  const [custTaxId,   setCustTaxId] = useState('');
+  const [custAddr,    setCustAddr]  = useState('');
+  const [docType,     setDocType]   = useState('quotation');
+  const [dueDate,     setDueDate]   = useState('');
+  const [refDoc,      setRefDoc]    = useState('');
+  const [orderNote,   setOrderNote] = useState('');
+  const [staffName,   setStaffName] = useState('');
+  const [discAmt,     setDiscAmt]   = useState('');
+  const [useVat,      setUseVat]    = useState(false);
+  const xlsxOk = useXLSX();
+
+  useEffect(()=>{ loadOrders(); },[]);
+
+  const loadOrders = async () => {
+    setLoading(true);
+    const { data } = await supabase.from('sales_orders')
+      .select('*').order('created_at',{ascending:false}).limit(500);
+    setOrders(data||[]);
+    setLoading(false);
+  };
+
+  // Filter orders by period
+  const filtered = useMemo(()=>{
+    const now = new Date();
+    const today = new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    const monthStart = new Date(now.getFullYear(),now.getMonth(),1);
+    const lastMonth  = new Date(now.getFullYear(),now.getMonth()-1,1);
+    const lastMonthEnd = new Date(now.getFullYear(),now.getMonth(),0);
+    const yearStart  = new Date(now.getFullYear(),0,1);
+
+    return orders.filter(o=>{
+      const d = new Date(o.created_at);
+      let inPeriod = true;
+      if(filterPeriod==='today')      inPeriod = d>=today;
+      else if(filterPeriod==='this_month') inPeriod = d>=monthStart;
+      else if(filterPeriod==='last_month') inPeriod = d>=lastMonth&&d<=lastMonthEnd;
+      else if(filterPeriod==='this_year')  inPeriod = d>=yearStart;
+      else if(filterPeriod==='month_pick'){
+        const [y,m]=quickMonth.split('-');
+        inPeriod = d.getFullYear()===parseInt(y)&&d.getMonth()===parseInt(m)-1;
+      } else if(filterPeriod==='custom'&&customStart&&customEnd){
+        const cs=new Date(customStart); const ce=new Date(customEnd); ce.setHours(23,59,59);
+        inPeriod = d>=cs&&d<=ce;
+      }
+      const inStatus = filterStatus==='all' || o.status===filterStatus;
+      const inType   = filterType==='all'   || o.doc_type===filterType;
+      return inPeriod && inStatus && inType;
+    });
+  },[orders,filterPeriod,filterStatus,filterType,customStart,customEnd,quickMonth]);
+
+  // Totals summary
+  const summary = useMemo(()=>{
+    const paid     = filtered.filter(o=>o.status==='paid');
+    const pending  = filtered.filter(o=>o.status==='sent');
+    const draft    = filtered.filter(o=>o.status==='draft');
+    return {
+      totalRevenue: paid.reduce((s,o)=>s+o.total,0),
+      totalPending: pending.reduce((s,o)=>s+o.total,0),
+      paidCount:    paid.length,
+      pendingCount: pending.length,
+      draftCount:   draft.length,
+    };
+  },[filtered]);
+
+  const sugs = useMemo(()=>{
+    if(!kw.trim()) return [];
+    const words = kw.toLowerCase().split(/\s+/).filter(Boolean);
+    return PR.filter(p=>words.every(w=>(p[0]+' '+p[1]+' '+p[2]).toLowerCase().includes(w))).slice(0,12);
+  },[kw]);
+
+  const addToCart = p => {
+    setCart(c=>{ const ex=c.find(x=>x.sku===p[0]); if(ex)return c.map(x=>x.sku===p[0]?{...x,qty:x.qty+1}:x); return[...c,{sku:p[0],name:p[1],cat:p[2],unit_price:p[3],sell:p[3],qty:1,discount_pct:0}]; });
+    setKw('');
+  };
+
+  const subtotal = cart.reduce((s,x)=>s+x.sell*x.qty*(1-x.discount_pct/100),0);
+  const disc     = parseFloat(discAmt)||0;
+  const afterD   = Math.max(0, subtotal-disc);
+  const vatAmt   = useVat ? afterD*VAT_RATE : 0;
+  const grand    = afterD+vatAmt;
+
+  const genDocNum = (type) => {
+    const prefix = DOC_LABELS[type]?.prefix||'DOC';
+    return prefix+'-'+Date.now().toString().slice(-9);
+  };
+
+  const createOrder = async (status='draft') => {
+    if(!cart.length){setMsg('❌ ยังไม่มีรายการสินค้า');return;}
+    setSaving(true); setMsg('');
+    const items = cart.map(x=>({
+      sku:x.sku, name:x.name, cat:x.cat,
+      qty:x.qty, unit_price:x.unit_price,
+      sell:x.sell, discount_pct:x.discount_pct,
+      subtotal: x.sell*x.qty*(1-x.discount_pct/100),
+      cost: stock[x.sku]?.cost||0,
+    }));
+    const orderData = {
+      doc_number:      genDocNum(docType),
+      doc_type:        docType,
+      status,
+      customer_id:     customer?.customer_id||null,
+      customer_name:   customer?.name||'',
+      customer_address:custAddr||(customer?.address||''),
+      customer_tax_id: custTaxId,
+      items,
+      subtotal,
+      discount_amount: disc,
+      after_discount:  afterD,
+      vat_amount:      vatAmt,
+      total:           grand,
+      due_date:        dueDate||null,
+      ref_doc:         refDoc,
+      note:            orderNote,
+      staff_name:      staffName,
+      payment_method:  '',
+    };
+    const {data:newOrder, error} = await supabase.from('sales_orders').insert([orderData]).select().single();
+    if(error){setMsg('❌ '+error.message);setSaving(false);return;}
+    setMsg('✅ สร้าง '+orderData.doc_number+' เรียบร้อย');
+    setOrders(prev=>[newOrder,...prev]);
+    // ถ้าชำระแล้ว ตัดสต็อก
+    if(status==='paid'){
+      const ns={...stock}; const ups=[];
+      for(const it of items){
+        const cur=ns[it.sku]?.qty||0;
+        ns[it.sku]={...(ns[it.sku]||{}),qty:Math.max(0,cur-it.qty)};
+        ups.push({sku:it.sku,qty:ns[it.sku].qty,safety:ns[it.sku]?.safety||10,cost:ns[it.sku]?.cost||0});
+      }
+      await supabase.from('stock').upsert(ups,{onConflict:'sku'});
+      setStock(ns);
+    }
+    // Reset form
+    setCart([]); setCustomer(null); setCustTaxId(''); setCustAddr(''); setDiscAmt('');
+    setRefDoc(''); setOrderNote(''); setStaffName(''); setUseVat(false);
+    setSaving(false); setTab('list');
+    // Print
+    setTimeout(()=>printDoc(newOrder), 300);
+  };
+
+  const markPaid = async (order, payMethod='transfer') => {
+    const { error } = await supabase.from('sales_orders').update({
+      status:'paid', payment_method:payMethod, payment_date:new Date().toISOString().split('T')[0]
+    }).eq('id',order.id);
+    if(error){setMsg('❌ '+error.message);return;}
+    // ตัดสต็อก
+    const ns={...stock}; const ups=[];
+    for(const it of order.items){
+      const cur=ns[it.sku]?.qty||0;
+      ns[it.sku]={...(ns[it.sku]||{}),qty:Math.max(0,cur-it.qty)};
+      ups.push({sku:it.sku,qty:ns[it.sku].qty,safety:ns[it.sku]?.safety||10,cost:ns[it.sku]?.cost||0});
+    }
+    await supabase.from('stock').upsert(ups,{onConflict:'sku'});
+    setStock(ns);
+    setOrders(prev=>prev.map(o=>o.id===order.id?{...o,status:'paid',payment_method:payMethod}:o));
+    setMsg('✅ อัพเดทสถานะชำระแล้ว');
+    // Print receipt
+    const updated = {...order, status:'paid', payment_method:payMethod};
+    printDoc({...updated, doc_type:'tax_invoice'});
+  };
+
+  const cancelOrder = async (id) => {
+    await supabase.from('sales_orders').update({status:'cancelled'}).eq('id',id);
+    setOrders(prev=>prev.map(o=>o.id===id?{...o,status:'cancelled'}:o));
+  };
+
+  const STATUS_STYLE: Record<string,any> = {
+    draft:     {background:'#E5E7EB',color:'#374151'},
+    sent:      {background:T.blueLight,color:T.blue},
+    paid:      {background:T.greenLight,color:T.green},
+    cancelled: {background:T.redLight,color:T.red},
+  };
+  const STATUS_LABEL: Record<string,string> = {
+    draft:'📝 ร่าง', sent:'📤 ส่งแล้ว/รอชำระ', paid:'✅ ชำระแล้ว', cancelled:'❌ ยกเลิก'
+  };
+  const TYPE_LABEL: Record<string,string> = {
+    quotation:'ใบเสนอราคา', invoice:'ใบแจ้งหนี้', receipt:'ใบเสร็จ', tax_invoice:'ใบกำกับภาษี'
+  };
+
+  return(
+    <div>
+      <div style={{...S.nav,marginBottom:14}}>
+        {[['list','📋 รายการทั้งหมด'],['create','➕ สร้างเอกสารใหม่']].map(([v,l])=>(
+          <button key={v} style={nbtn(tab===v)} onClick={()=>setTab(v)}>{l}</button>
+        ))}
+      </div>
+
+      {msg&&<div style={{...S.card,background:msg.startsWith('✅')?T.greenLight:T.redLight,color:msg.startsWith('✅')?T.green:T.red,fontWeight:500,marginBottom:12}}>{msg}</div>}
+
+      {tab==='list'&&(
+        <div>
+          {/* Filter bar */}
+          <div style={S.card}>
+            <div style={{...S.row,gap:8,flexWrap:'wrap',marginBottom:10}}>
+              {[['today','วันนี้'],['this_month','เดือนนี้'],['last_month','เดือนที่แล้ว'],['this_year','ปีนี้'],['month_pick','เลือกเดือน'],['custom','กำหนดเอง']].map(([v,l])=>(
+                <button key={v} style={nbtn(filterPeriod===v)} onClick={()=>setFilterPeriod(v)}>{l}</button>
+              ))}
+            </div>
+            <div style={{...S.row,gap:8,flexWrap:'wrap'}}>
+              {filterPeriod==='month_pick'&&<input type="month" style={{...S.inp,fontSize:12}} value={quickMonth} onChange={e=>{setQuickMonth(e.target.value);setFilterPeriod('month_pick');}}/>}
+              {filterPeriod==='custom'&&<><input type="date" style={{...S.inp,fontSize:12}} value={customStart} onChange={e=>setCustomStart(e.target.value)}/><span style={{fontSize:12,color:T.textMuted}}>ถึง</span><input type="date" style={{...S.inp,fontSize:12}} value={customEnd} onChange={e=>setCustomEnd(e.target.value)}/></>}
+              <select style={{...S.inp,fontSize:12}} value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
+                <option value="all">ทุกสถานะ</option>
+                {Object.entries(STATUS_LABEL).map(([v,l])=><option key={v} value={v}>{l}</option>)}
+              </select>
+              <select style={{...S.inp,fontSize:12}} value={filterType} onChange={e=>setFilterType(e.target.value)}>
+                <option value="all">ทุกประเภท</option>
+                {Object.entries(TYPE_LABEL).map(([v,l])=><option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Summary KPIs */}
+          <div style={S.kgrid}>
+            <KPI label="ชำระแล้ว" value={'฿'+fmt(summary.totalRevenue)} sub={summary.paidCount+' ใบ'} icon="✅" bg={T.greenLight} color={T.green}/>
+            <KPI label="รอชำระ"   value={'฿'+fmt(summary.totalPending)} sub={summary.pendingCount+' ใบ'} icon="📤" bg={T.blueLight}  color={T.blue}/>
+            <KPI label="ร่าง"     value={summary.draftCount+' ใบ'} icon="📝" bg={T.grayLight} color={T.gray}/>
+            <KPI label="รวมทั้งหมด" value={filtered.length+' ใบ'} icon="📋" bg={T.grayLight} color={T.dark}/>
+          </div>
+
+          {/* Orders table */}
+          {loading?<div style={{textAlign:'center',padding:40,color:T.textMuted}}>⏳ กำลังโหลด...</div>:(
+            <div style={S.card}>
+              <div style={S.cardTitle}>📋 รายการเอกสาร ({filtered.length} รายการ)</div>
+              <div style={S.tow}>
+                <table style={S.tbl}>
+                  <thead><tr>
+                    {['เลขที่','ประเภท','ลูกค้า','วันที่','กำหนดชำระ','มูลค่า','สถานะ','จัดการ'].map((h,i)=>(
+                      <th key={i} style={S.th}>{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody>
+                    {filtered.length===0
+                      ?<tr><td colSpan={8} style={{...tdr(0),textAlign:'center',color:T.textMuted,padding:32}}>ไม่มีเอกสารในช่วงเวลานี้</td></tr>
+                      :filtered.map((o,i)=>(
+                        <tr key={o.id}>
+                          <td style={{...tdr(i),color:T.blue,fontWeight:600,whiteSpace:'nowrap'}}>{o.doc_number}</td>
+                          <td style={{...tdr(i),fontSize:11}}>{TYPE_LABEL[o.doc_type]||o.doc_type}</td>
+                          <td style={tdr(i)}>{o.customer_name||'-'}</td>
+                          <td style={{...tdr(i),fontSize:11,whiteSpace:'nowrap'}}>{new Date(o.created_at).toLocaleDateString('th-TH')}</td>
+                          <td style={{...tdr(i),fontSize:11,whiteSpace:'nowrap'}}>{o.due_date?new Date(o.due_date).toLocaleDateString('th-TH'):'-'}</td>
+                          <td style={{...tdr(i),fontWeight:500}}>฿{fmt(o.total)}</td>
+                          <td style={tdr(i)}>
+                            <span style={{...STATUS_STYLE[o.status]||{},borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:500,whiteSpace:'nowrap'}}>
+                              {STATUS_LABEL[o.status]||o.status}
+                            </span>
+                          </td>
+                          <td style={tdr(i)}>
+                            <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                              <button style={btn('dk',{padding:'3px 8px',fontSize:11})} onClick={()=>printDoc(o)}>🖨️</button>
+                              <button style={btn('out',{padding:'3px 8px',fontSize:11})} onClick={()=>printDoc(o,true)}>สำเนา</button>
+                              {o.status==='draft'&&<button style={btn('bl',{padding:'3px 8px',fontSize:11})} onClick={()=>{supabase.from('sales_orders').update({status:'sent'}).eq('id',o.id).then(()=>setOrders(prev=>prev.map(x=>x.id===o.id?{...x,status:'sent'}:x)));setMsg('✅ อัพเดทสถานะแล้ว');}}>ส่งแล้ว</button>}
+                              {o.status==='sent'&&<button style={btn('gr',{padding:'3px 8px',fontSize:11})} onClick={()=>markPaid(o)}>💰 ชำระแล้ว</button>}
+                              {o.status==='paid'&&<button style={btn('dk',{padding:'3px 8px',fontSize:11})} onClick={()=>printDoc({...o,doc_type:'tax_invoice'})}>ใบกำกับ</button>}
+                              {['draft','sent'].includes(o.status)&&<button style={btn('rd',{padding:'3px 8px',fontSize:11})} onClick={()=>cancelOrder(o.id)}>ยกเลิก</button>}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab==='create'&&(
+        <div>
+          <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,320px)',gap:12}}>
+            <div>
+              {/* Doc type selector */}
+              <div style={S.card}>
+                <div style={S.cardTitle}>📄 ประเภทเอกสาร</div>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                  {Object.entries(TYPE_LABEL).map(([v,l])=>(
+                    <button key={v} style={{
+                      ...nbtn(docType===v),
+                      padding:'8px 16px',
+                      background:docType===v?T.dark:'transparent',
+                      color:docType===v?'#EFF7F3':T.text,
+                      borderRadius:T.radius,
+                    }} onClick={()=>setDocType(v)}>{l}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Search products */}
+              <div style={S.card}>
+                <div style={S.cardTitle}>🔍 ค้นหาสินค้า</div>
+                <input style={{...S.inp,width:'100%'}} placeholder="พิมพ์ชื่อสินค้า/SKU" value={kw} onChange={e=>setKw(e.target.value)} autoComplete="off"/>
+                {sugs.length>0&&(
+                  <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:8}}>
+                    {sugs.map(p=>(
+                      <button key={p[0]} style={{padding:'5px 10px',border:`1px solid ${T.border}`,borderRadius:T.radius,background:T.grayLight,cursor:'pointer',fontSize:12}} onClick={()=>addToCart(p)}>
+                        <span style={{fontWeight:600}}>{p[1]}</span>
+                        <span style={{color:T.green,marginLeft:4,fontSize:11}}>({stock[p[0]]?.qty||0})</span>
+                        <span style={{color:T.textMuted,marginLeft:4}}>฿{fmt(p[3])}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Cart */}
+              {cart.length>0&&(
+                <div style={S.card}>
+                  <div style={S.cardTitle}>🛒 รายการสินค้า</div>
+                  <div style={S.tow}>
+                    <table style={S.tbl}>
+                      <thead><tr>{['ชื่อสินค้า','ราคา/หน่วย','ส่วนลด %','จำนวน','รวม',''].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead>
+                      <tbody>
+                        {cart.map((x,i)=>(
+                          <tr key={x.sku}>
+                            <td style={tdr(i)}>
+                              <div style={{fontWeight:500}}>{x.name}</div>
+                              <div style={{fontSize:10,color:T.textMuted}}>{x.sku}</div>
+                            </td>
+                            <td style={tdr(i)}>
+                              <input type="number" min="0" step="0.01" style={{...S.inp,width:85,padding:'3px 6px'}} value={x.sell}
+                                onChange={e=>setCart(c=>c.map(it=>it.sku===x.sku?{...it,sell:parseFloat(e.target.value)||0}:it))}/>
+                            </td>
+                            <td style={tdr(i)}>
+                              <input type="number" min="0" max="100" step="0.5" style={{...S.inp,width:65,padding:'3px 6px'}} value={x.discount_pct}
+                                onChange={e=>setCart(c=>c.map(it=>it.sku===x.sku?{...it,discount_pct:parseFloat(e.target.value)||0}:it))}/>
+                            </td>
+                            <td style={tdr(i)}>
+                              <input type="number" min="1" style={{...S.inp,width:60,padding:'3px 6px',textAlign:'center'}} value={x.qty}
+                                onChange={e=>setCart(c=>c.map(it=>it.sku===x.sku?{...it,qty:Math.max(1,parseInt(e.target.value)||1)}:it))}/>
+                            </td>
+                            <td style={{...tdr(i),fontWeight:500}}>฿{fmt(x.sell*x.qty*(1-x.discount_pct/100))}</td>
+                            <td style={tdr(i)}><button style={{background:'none',border:'none',color:T.red,cursor:'pointer',fontSize:18}} onClick={()=>setCart(c=>c.filter(it=>it.sku!==x.sku))}>×</button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Right panel */}
+            <div>
+              <div style={S.card}>
+                <div style={S.cardTitle}>💰 สรุป & ข้อมูลเอกสาร</div>
+
+                {/* Totals */}
+                <div style={{background:T.grayLight,borderRadius:T.radius,padding:'12px 14px',marginBottom:12}}>
+                  {[['ราคารวม','฿'+fmt(subtotal)],['ส่วนลด',disc>0?'-฿'+fmt(disc):'-'],['ก่อน VAT','฿'+fmt(afterD)]].map(([l,v],i)=>(
+                    <div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'2px 0',color:l==='ส่วนลด'&&disc>0?T.red:T.text}}><span>{l}</span><span>{v}</span></div>
+                  ))}
+                  {useVat&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'2px 0',color:T.amber}}><span>VAT 7%</span><span>฿{fmt(vatAmt)}</span></div>}
+                  <div style={{display:'flex',justifyContent:'space-between',fontWeight:700,fontSize:18,marginTop:8,paddingTop:8,borderTop:`2px solid ${T.border}`,color:T.dark}}><span>ยอดรวม</span><span>฿{fmt(grand)}</span></div>
+                </div>
+
+                {/* VAT toggle */}
+                <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',marginBottom:10,fontSize:12}}>
+                  <input type="checkbox" checked={useVat} onChange={e=>setUseVat(e.target.checked)} style={{width:15,height:15}}/>
+                  <span>คิด VAT 7%</span>
+                </label>
+
+                {/* Discount */}
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:3}}>ส่วนลดรวม (฿)</div>
+                <input type="number" min="0" style={{...S.inp,width:'100%',marginBottom:8}} placeholder="0" value={discAmt} onChange={e=>setDiscAmt(e.target.value)}/>
+
+                {/* Customer */}
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:3}}>ลูกค้า</div>
+                <CustomerSearch value={customer} onSelect={c=>{setCustomer(c);setCustAddr(c.address||'');}}/>
+
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:3,marginTop:8}}>เลขผู้เสียภาษีลูกค้า</div>
+                <input style={{...S.inp,width:'100%',marginBottom:6}} placeholder="0-0000-00000-00-0" value={custTaxId} onChange={e=>setCustTaxId(e.target.value)}/>
+
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:3}}>ที่อยู่ลูกค้า</div>
+                <textarea style={{...S.inp,width:'100%',height:60,resize:'vertical',marginBottom:6}} placeholder="ที่อยู่สำหรับใบเอกสาร" value={custAddr} onChange={e=>setCustAddr(e.target.value)}/>
+
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
+                  <div>
+                    <div style={{fontSize:12,color:T.textMuted,marginBottom:3}}>กำหนดชำระ</div>
+                    <input type="date" style={{...S.inp,width:'100%'}} value={dueDate} onChange={e=>setDueDate(e.target.value)}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:12,color:T.textMuted,marginBottom:3}}>พนักงานขาย</div>
+                    <input style={{...S.inp,width:'100%'}} placeholder="ชื่อพนักงาน" value={staffName} onChange={e=>setStaffName(e.target.value)}/>
+                  </div>
+                </div>
+
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:3}}>เอกสารอ้างอิง</div>
+                <input style={{...S.inp,width:'100%',marginBottom:6}} placeholder="เช่น QT-xxx" value={refDoc} onChange={e=>setRefDoc(e.target.value)}/>
+
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:3}}>หมายเหตุ</div>
+                <input style={{...S.inp,width:'100%',marginBottom:12}} placeholder="หมายเหตุ..." value={orderNote} onChange={e=>setOrderNote(e.target.value)}/>
+
+                {/* Action buttons */}
+                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                  <button style={{...btn('dk'),width:'100%',padding:'11px 0'}} onClick={()=>createOrder('draft')} disabled={saving||!cart.length}>
+                    📝 บันทึกร่าง + พิมพ์{' '}{TYPE_LABEL[docType]}
+                  </button>
+                  <button style={{...btn('bl'),width:'100%',padding:'11px 0'}} onClick={()=>createOrder('sent')} disabled={saving||!cart.length}>
+                    📤 ส่งลูกค้าแล้ว (รอชำระ)
+                  </button>
+                  <button style={{...btn('gr'),width:'100%',padding:'11px 0'}} onClick={()=>createOrder('paid')} disabled={saving||!cart.length}>
+                    ✅ ชำระแล้ว + ตัดสต็อก + พิมพ์ใบเสร็จ
+                  </button>
+                </div>
+                {saving&&<div style={{marginTop:8,fontSize:12,color:T.textMuted}}>⏳ กำลังบันทึก...</div>}
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -2905,8 +3596,8 @@ export default function App(){
     {v:'sales',    icon:'💰', l:'บันทึกขาย',           page:'sales'},
     {v:'plan',     icon:'🏭', l:'แผนผลิต',             page:'plan'},
     {v:'po',       icon:'🛒', l:'สั่งซื้อ (PO)',        page:'po'},
+    {v:'orders',   icon:'📋', l:'คำสั่งซื้อ',            page:'orders'},
     {v:'users',    icon:'👥', l:'จัดการผู้ใช้',         page:'users'},
-    {v:'po',       icon:'🛒', l:'สั่งซื้อ (PO)',        page:'po'},
     {v:'settings', icon:'⚙️', l:'ตั้งค่าระบบ',          page:'settings'},
   ];
   const visibleTabs = allTabs.filter(t => can(t.page));
@@ -2969,6 +3660,7 @@ export default function App(){
         {tab==='sales'   &&can('sales')     &&<SalesPage    stock={stock} setStock={setStock} setSales={setSales} staff={staff} seeCost={can('sales','see_cost')} seeProfit={can('sales','see_profit')}/>}
         {tab==='plan'    &&can('plan')      &&<PlanPage     stock={stock} sales={sales}/>}
         {tab==='po'      &&can('po')        &&<POPage       stock={stock} sales={sales} products={products}/>}
+        {tab==='orders'  &&can('orders')    &&<OrdersPage   stock={stock} setStock={setStock} setSales={setSales}/>}
         {tab==='users'   &&can('users')     &&<UserManagePage profile={profile}/>}
         {tab==='settings'&&can('settings')  &&<SettingsPage permissions={permissions} setPermissions={setPermissions} profile={profile}/>}
       </div>
