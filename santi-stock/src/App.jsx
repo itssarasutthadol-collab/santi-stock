@@ -951,7 +951,8 @@ function SalesPage({stock,setStock,setSales,staff=[],profile}){
         </div>
       </div>
 
-      <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,320px)',gap:12}}>
+      <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr)',gap:12}} className="sales-grid">
+      <style>{'@media(min-width:700px){.sales-grid{grid-template-columns:minmax(0,1fr) minmax(0,320px) !important}}'}</style>
         <div>
           {/* Search */}
           <div style={S.card}>
@@ -2106,6 +2107,299 @@ function UserManagePage({profile}){
 }
 
 // ════════════════════════════════════════════════════════
+// PO PAGE — ระบบสั่งซื้อสินค้า
+// ════════════════════════════════════════════════════════
+function POPage({stock, sales, products}){
+  const [poList,   setPoList]   = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [tab,      setTab]      = useState('create');
+  const [poItems,  setPoItems]  = useState([]);
+  const [supplier, setSupplier] = useState('');
+  const [poNote,   setPoNote]   = useState('');
+  const [dueDate,  setDueDate]  = useState('');
+  const [saving,   setSaving]   = useState(false);
+  const [msg,      setMsg]      = useState('');
+  const [kw,       setKw]       = useState('');
+  const xlsxOk = useXLSX();
+
+  useEffect(()=>{ loadPOs(); },[]);
+
+  const loadPOs = async () => {
+    setLoading(true);
+    const { data } = await supabase.from('purchase_orders')
+      .select('*').order('created_at',{ascending:false}).limit(50);
+    setPoList(data||[]);
+    setLoading(false);
+  };
+
+  // คำนวณ PO จากแผนผลิต
+  const calcFromPlan = () => {
+    const cutoff = new Date(Date.now()-7*86400000);
+    const skuSold: Record<string,number> = {};
+    sales.filter(s=>new Date(s.date)>=cutoff).forEach(t=>
+      t.items.forEach((it:any)=>{ skuSold[it.sku]=(skuSold[it.sku]||0)+it.qty; })
+    );
+    const items: any[] = [];
+    Object.entries(skuSold).forEach(([sku,sold])=>{
+      const p = PRMAP[sku]; if(!p) return;
+      const cur = stock[sku]?.qty||0;
+      const daily = sold/7;
+      const proj  = Math.ceil(daily*14*1.2);
+      const need  = Math.max(0, proj-cur);
+      if(need>0) items.push({
+        sku, name:p.name, cat:p.cat,
+        qty_current: cur,
+        qty_need: need,
+        qty_order: need,
+        unit_cost: stock[sku]?.cost||p.cost,
+        note: ''
+      });
+    });
+    setPoItems(items.sort((a,b)=>b.qty_need-a.qty_need));
+    setMsg(items.length>0?`✅ คำนวณแล้ว พบ ${items.length} รายการที่ต้องสั่งซื้อ`:'✅ สต็อกเพียงพอ ไม่มีรายการที่ต้องสั่งซื้อ');
+  };
+
+  // เพิ่มสินค้าเข้า PO แบบ manual
+  const addItem = (p: any) => {
+    if(poItems.find(x=>x.sku===p[0])) return;
+    setPoItems(items=>[...items,{
+      sku:p[0], name:p[1], cat:p[2],
+      qty_current: stock[p[0]]?.qty||0,
+      qty_need: 0,
+      qty_order: 1,
+      unit_cost: stock[p[0]]?.cost||p[4],
+      note:''
+    }]);
+    setKw('');
+  };
+
+  const totalCost = poItems.reduce((s,x)=>s+x.qty_order*x.unit_cost,0);
+
+  const createPO = async () => {
+    if(!poItems.length){setMsg('❌ ยังไม่มีรายการสินค้า');return;}
+    setSaving(true); setMsg('');
+    const poNumber = 'PO-'+Date.now().toString().slice(-8);
+    const { error } = await supabase.from('purchase_orders').insert([{
+      po_number:   poNumber,
+      supplier:    supplier||'ไม่ระบุ',
+      items:       poItems,
+      total_cost:  totalCost,
+      status:      'draft',
+      due_date:    dueDate||null,
+      note:        poNote,
+    }]);
+    if(error){setMsg('❌ '+error.message);setSaving(false);return;}
+    setMsg('✅ สร้าง PO '+poNumber+' เรียบร้อย');
+    setPoItems([]); setSupplier(''); setPoNote(''); setDueDate('');
+    setSaving(false); loadPOs(); setTab('history');
+  };
+
+  // Export PO เป็น Excel
+  const exportPO = (po: any) => {
+    if(!xlsxOk) return;
+    exportXLSX(`PO_${po.po_number}.xlsx`,[
+      { name:'ใบสั่งซื้อ',
+        headers:['เลขที่ PO','Supplier','วันที่สร้าง','กำหนดรับ','สถานะ','ยอดรวม'],
+        data:[[po.po_number, po.supplier, new Date(po.created_at).toLocaleDateString('th-TH'), po.due_date||'-', po.status, fmt(po.total_cost)]]
+      },
+      { name:'รายการสินค้า',
+        headers:['#','SKU','ชื่อสินค้า','หมวด','สต็อกปัจจุบัน','จำนวนที่สั่ง','ราคาทุน/หน่วย','รวม','หมายเหตุ'],
+        data:(po.items||[]).map((it:any,i:number)=>[
+          i+1, it.sku, it.name, it.cat||'',
+          it.qty_current||0, it.qty_order, it.unit_cost,
+          Math.round(it.qty_order*it.unit_cost), it.note||''
+        ])
+      }
+    ]);
+  };
+
+  const STATUS_STYLE: Record<string,any> = {
+    draft:    { background:'#E5E7EB', color:'#374151' },
+    sent:     { background:T.blueLight, color:T.blue },
+    received: { background:T.greenLight, color:T.green },
+    cancelled:{ background:T.redLight, color:T.red },
+  };
+  const STATUS_LABEL: Record<string,string> = {
+    draft:'📝 ร่าง', sent:'📤 ส่งแล้ว', received:'✅ รับแล้ว', cancelled:'❌ ยกเลิก'
+  };
+
+  const updateStatus = async (id:number, status:string) => {
+    await supabase.from('purchase_orders').update({status}).eq('id',id);
+    setPoList(l=>l.map(p=>p.id===id?{...p,status}:p));
+  };
+
+  const sugs = useMemo(()=>{
+    if(!kw.trim()) return [];
+    const words = kw.toLowerCase().split(/\s+/).filter(Boolean);
+    return PR.filter(p=>{
+      const hay=(p[0]+' '+p[1]+' '+p[2]).toLowerCase();
+      return words.every((w:string)=>hay.includes(w));
+    }).slice(0,10);
+  },[kw]);
+
+  return(
+    <div>
+      <div style={{...S.nav,marginBottom:14}}>
+        {[['create','🛒 สร้าง PO ใหม่'],['history','📋 ประวัติ PO']].map(([v,l])=>(
+          <button key={v} style={nbtn(tab===v)} onClick={()=>setTab(v)}>{l}</button>
+        ))}
+      </div>
+
+      {tab==='create'&&(
+        <div>
+          {msg&&<div style={{...S.card,background:msg.startsWith('✅')?T.greenLight:T.redLight,color:msg.startsWith('✅')?T.green:T.red,fontWeight:500,marginBottom:12}}>{msg}</div>}
+
+          {/* PO Header */}
+          <div style={S.card}>
+            <div style={S.cardTitle}>📋 ข้อมูล PO</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'8px 14px'}}>
+              <div>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:4}}>Supplier / ผู้จัดจำหน่าย</div>
+                <input style={{...S.inp,width:'100%'}} placeholder="ชื่อบริษัท/ร้านค้า" value={supplier} onChange={e=>setSupplier(e.target.value)}/>
+              </div>
+              <div>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:4}}>กำหนดรับสินค้า</div>
+                <input type="date" style={{...S.inp,width:'100%'}} value={dueDate} onChange={e=>setDueDate(e.target.value)}/>
+              </div>
+              <div>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:4}}>หมายเหตุ</div>
+                <input style={{...S.inp,width:'100%'}} placeholder="หมายเหตุ..." value={poNote} onChange={e=>setPoNote(e.target.value)}/>
+              </div>
+            </div>
+          </div>
+
+          {/* Add items */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+            <div style={S.card}>
+              <div style={S.cardTitle}>🤖 คำนวณจากแผนผลิต (อัตโนมัติ)</div>
+              <div style={{fontSize:12,color:T.textMuted,marginBottom:10,lineHeight:1.7}}>
+                คำนวณจากยอดขาย 7 วันล่าสุด คาดการณ์ 14 วันข้างหน้า + buffer 20%
+              </div>
+              <button style={{...btn('dk'),width:'100%'}} onClick={calcFromPlan}>
+                🔄 คำนวณและโหลดรายการ
+              </button>
+            </div>
+            <div style={S.card}>
+              <div style={S.cardTitle}>➕ เพิ่มสินค้าเอง</div>
+              <input style={{...S.inp,width:'100%'}} placeholder="พิมพ์ชื่อสินค้า/SKU" value={kw} onChange={e=>setKw(e.target.value)}/>
+              {sugs.length>0&&(
+                <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:8}}>
+                  {sugs.map((p:any)=>(
+                    <button key={p[0]} style={{padding:'4px 10px',border:`1px solid ${T.border}`,borderRadius:T.radius,background:T.grayLight,cursor:'pointer',fontSize:11}} onClick={()=>addItem(p)}>
+                      {p[1]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* PO Items table */}
+          {poItems.length>0&&(
+            <div style={S.card}>
+              <div style={{...S.cardTitle,justifyContent:'space-between'}}>
+                <span>🛒 รายการสั่งซื้อ ({poItems.length} รายการ)</span>
+                <span style={{fontSize:13,fontWeight:600,color:T.green}}>รวม: ฿{fmt(totalCost)}</span>
+              </div>
+              <div style={S.tow}>
+                <table style={S.tbl}>
+                  <thead><tr>
+                    {['SKU','ชื่อสินค้า','หมวด','สต็อกปัจจุบัน','จำนวนสั่ง','ราคาทุน/หน่วย','รวม','หมายเหตุ',''].map((h,i)=>(
+                      <th key={i} style={S.th}>{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody>
+                    {poItems.map((item,i)=>(
+                      <tr key={item.sku}>
+                        <td style={{...tdr(i),color:T.blue,fontWeight:500,fontSize:11}}>{item.sku}</td>
+                        <td style={tdr(i)}>{item.name}</td>
+                        <td style={{...tdr(i),fontSize:11,color:T.textMuted}}>{item.cat}</td>
+                        <td style={{...tdr(i),textAlign:'center'}}>{item.qty_current}</td>
+                        <td style={tdr(i)}>
+                          <input type="number" min="1" style={{...S.inp,width:70,padding:'3px 6px',borderColor:T.blue,background:T.blueLight,color:T.blue,fontWeight:600,textAlign:'center'}}
+                            value={item.qty_order}
+                            onChange={e=>setPoItems(items=>items.map(x=>x.sku===item.sku?{...x,qty_order:parseInt(e.target.value)||1}:x))}/>
+                        </td>
+                        <td style={tdr(i)}>
+                          <input type="number" min="0" step="0.01" style={{...S.inp,width:85,padding:'3px 6px'}}
+                            value={item.unit_cost}
+                            onChange={e=>setPoItems(items=>items.map(x=>x.sku===item.sku?{...x,unit_cost:parseFloat(e.target.value)||0}:x))}/>
+                        </td>
+                        <td style={{...tdr(i),fontWeight:500}}>฿{fmt(item.qty_order*item.unit_cost)}</td>
+                        <td style={tdr(i)}>
+                          <input style={{...S.inp,width:100,padding:'3px 6px',fontSize:11}} placeholder="หมายเหตุ"
+                            value={item.note}
+                            onChange={e=>setPoItems(items=>items.map(x=>x.sku===item.sku?{...x,note:e.target.value}:x))}/>
+                        </td>
+                        <td style={tdr(i)}>
+                          <button style={{background:'none',border:'none',color:T.red,cursor:'pointer',fontSize:16}} onClick={()=>setPoItems(items=>items.filter(x=>x.sku!==item.sku))}>×</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{...S.row,marginTop:12,gap:8}}>
+                <button style={btn('gr')} onClick={createPO} disabled={saving}>
+                  {saving?'กำลังสร้าง...':'💾 สร้าง PO'}
+                </button>
+                <button style={btn('gy')} onClick={()=>setPoItems([])}>ล้างรายการ</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab==='history'&&(
+        <div>
+          {loading?<div style={{textAlign:'center',padding:40,color:T.textMuted}}>⏳ กำลังโหลด...</div>:
+          poList.length===0?<div style={{...S.card,textAlign:'center',color:T.textMuted,padding:40}}>ยังไม่มี PO — กด สร้าง PO ใหม่ เพื่อเริ่มต้น</div>:(
+            <div style={S.card}>
+              <div style={S.cardTitle}>📋 ประวัติใบสั่งซื้อ</div>
+              <div style={S.tow}>
+                <table style={S.tbl}>
+                  <thead><tr>
+                    {['เลขที่ PO','Supplier','วันที่','กำหนดรับ','รายการ','มูลค่า','สถานะ','จัดการ'].map((h,i)=>(
+                      <th key={i} style={S.th}>{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody>
+                    {poList.map((po,i)=>(
+                      <tr key={po.id}>
+                        <td style={{...tdr(i),fontWeight:600,color:T.blue}}>{po.po_number}</td>
+                        <td style={tdr(i)}>{po.supplier}</td>
+                        <td style={{...tdr(i),fontSize:11}}>{new Date(po.created_at).toLocaleDateString('th-TH')}</td>
+                        <td style={{...tdr(i),fontSize:11}}>{po.due_date?new Date(po.due_date).toLocaleDateString('th-TH'):'-'}</td>
+                        <td style={tdr(i)}>{(po.items||[]).length} รายการ</td>
+                        <td style={{...tdr(i),fontWeight:500}}>฿{fmt(po.total_cost)}</td>
+                        <td style={tdr(i)}>
+                          <span style={{...STATUS_STYLE[po.status]||{},borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:500}}>
+                            {STATUS_LABEL[po.status]||po.status}
+                          </span>
+                        </td>
+                        <td style={tdr(i)}>
+                          <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                            <button style={btn('gr',{padding:'3px 8px',fontSize:11})} onClick={()=>exportPO(po)} disabled={!xlsxOk}>📥</button>
+                            {po.status==='draft'&&<button style={btn('bl',{padding:'3px 8px',fontSize:11})} onClick={()=>updateStatus(po.id,'sent')}>ส่งแล้ว</button>}
+                            {po.status==='sent'&&<button style={btn('gr',{padding:'3px 8px',fontSize:11})} onClick={()=>updateStatus(po.id,'received')}>รับแล้ว</button>}
+                            {['draft','sent'].includes(po.status)&&<button style={btn('rd',{padding:'3px 8px',fontSize:11})} onClick={()=>updateStatus(po.id,'cancelled')}>ยกเลิก</button>}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ════════════════════════════════════════════════════════
 // SETTINGS PAGE — Permission Matrix + System Settings
 // ════════════════════════════════════════════════════════
 const ROLE_LIST = [
@@ -2610,7 +2904,9 @@ export default function App(){
     {v:'products', icon:'🏷️', l:'สินค้า',              page:'products'},
     {v:'sales',    icon:'💰', l:'บันทึกขาย',           page:'sales'},
     {v:'plan',     icon:'🏭', l:'แผนผลิต',             page:'plan'},
+    {v:'po',       icon:'🛒', l:'สั่งซื้อ (PO)',        page:'po'},
     {v:'users',    icon:'👥', l:'จัดการผู้ใช้',         page:'users'},
+    {v:'po',       icon:'🛒', l:'สั่งซื้อ (PO)',        page:'po'},
     {v:'settings', icon:'⚙️', l:'ตั้งค่าระบบ',          page:'settings'},
   ];
   const visibleTabs = allTabs.filter(t => can(t.page));
@@ -2672,6 +2968,7 @@ export default function App(){
         {tab==='products'&&can('products')  &&<ProductPage  products={products} setProducts={setProducts} stock={stock} setStock={setStock} canEdit={can('products','can_edit')}/>}
         {tab==='sales'   &&can('sales')     &&<SalesPage    stock={stock} setStock={setStock} setSales={setSales} staff={staff} seeCost={can('sales','see_cost')} seeProfit={can('sales','see_profit')}/>}
         {tab==='plan'    &&can('plan')      &&<PlanPage     stock={stock} sales={sales}/>}
+        {tab==='po'      &&can('po')        &&<POPage       stock={stock} sales={sales} products={products}/>}
         {tab==='users'   &&can('users')     &&<UserManagePage profile={profile}/>}
         {tab==='settings'&&can('settings')  &&<SettingsPage permissions={permissions} setPermissions={setPermissions} profile={profile}/>}
       </div>
