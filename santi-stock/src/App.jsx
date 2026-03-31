@@ -546,9 +546,6 @@ function StockPage({stock,setStock,profile}){
         </div>
       </div>
 
-      {/* LINE Notify */}
-      <LineNotifySettings stock={stock}/>
-
       {/* Filter bar */}
       <div style={S.card}>
         <div style={{...S.row,gap:8}}>
@@ -3108,7 +3105,9 @@ const PAGE_LIST = [
   {v:'stock',     l:'📦 สต็อก'},
   {v:'products',  l:'🏷️ สินค้า'},
   {v:'sales',     l:'💰 บันทึกขาย'},
+  {v:'orders',    l:'📋 ใบเสนอราคา/ใบแจ้งหนี้/ใบเสร็จ'},
   {v:'plan',      l:'🏭 แผนผลิต'},
+  {v:'po',        l:'🛒 สั่งซื้อ (PO)'},
   {v:'users',     l:'👥 จัดการผู้ใช้'},
   {v:'settings',  l:'⚙️ ตั้งค่าระบบ'},
 ];
@@ -3511,6 +3510,58 @@ function SettingsPage({permissions, setPermissions, profile}){
 
 
 // ════════════════════════════════════════════════════════
+// INVENTORY PAGE — สต็อก & สินค้า (sub-tabs)
+// ════════════════════════════════════════════════════════
+function InventoryPage({products,setProducts,stock,setStock,can}){
+  const [sub,setSub] = useState('stock');
+  return(
+    <div>
+      <div style={{display:'flex',gap:6,marginBottom:12,background:T.white,padding:'5px',borderRadius:T.radius,border:`1px solid ${T.border}`}}>
+        {can('stock')   &&<button style={{...nbtn(sub==='stock'),flex:1,textAlign:'center'}} onClick={()=>setSub('stock')}>📦 สต็อก</button>}
+        {can('products')&&<button style={{...nbtn(sub==='products'),flex:1,textAlign:'center'}} onClick={()=>setSub('products')}>🏷️ สินค้า</button>}
+      </div>
+      {sub==='stock'    &&can('stock')    &&<StockPage    stock={stock} setStock={setStock} canEdit={can('stock','can_edit')} seeCost={can('stock','see_cost')}/>}
+      {sub==='products' &&can('products') &&<ProductPage  products={products} setProducts={setProducts} stock={stock} setStock={setStock} canEdit={can('products','can_edit')}/>}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════
+// SELLING PAGE — ขาย & เอกสาร (sub-tabs)
+// ════════════════════════════════════════════════════════
+function SellingPage({stock,setStock,setSales,sales,staff,can}){
+  const [sub,setSub] = useState('quick');
+  return(
+    <div>
+      <div style={{display:'flex',gap:6,marginBottom:12,background:T.white,padding:'5px',borderRadius:T.radius,border:`1px solid ${T.border}`}}>
+        {can('sales')  &&<button style={{...nbtn(sub==='quick'),flex:1,textAlign:'center'}} onClick={()=>setSub('quick')}>⚡ บันทึกขายด่วน</button>}
+        {can('orders') &&<button style={{...nbtn(sub==='orders'),flex:1,textAlign:'center'}} onClick={()=>setSub('orders')}>📋 ใบเสนอราคา / ใบแจ้งหนี้ / ใบเสร็จ</button>}
+      </div>
+      {sub==='quick'  &&can('sales')  &&<SalesPage  stock={stock} setStock={setStock} setSales={setSales} staff={staff} seeCost={can('sales','see_cost')} seeProfit={can('sales','see_profit')}/>}
+      {sub==='orders' &&can('orders') &&<OrdersPage stock={stock} setStock={setStock} setSales={setSales}/>}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════
+// SUPPLY PAGE — ผลิต & สั่งซื้อ (sub-tabs)
+// ════════════════════════════════════════════════════════
+function SupplyPage({stock,setStock,sales,products,can}){
+  const [sub,setSub] = useState('plan');
+  return(
+    <div>
+      <div style={{display:'flex',gap:6,marginBottom:12,background:T.white,padding:'5px',borderRadius:T.radius,border:`1px solid ${T.border}`}}>
+        {can('plan')&&<button style={{...nbtn(sub==='plan'),flex:1,textAlign:'center'}} onClick={()=>setSub('plan')}>🏭 แผนผลิต</button>}
+        {can('po')  &&<button style={{...nbtn(sub==='po'),flex:1,textAlign:'center'}} onClick={()=>setSub('po')}>🛒 สั่งซื้อ (PO)</button>}
+      </div>
+      {sub==='plan'&&can('plan')&&<PlanPage stock={stock} sales={sales}/>}
+      {sub==='po'  &&can('po')  &&<POPage  stock={stock} sales={sales} products={products}/>}
+    </div>
+  );
+}
+
+
+// ════════════════════════════════════════════════════════
 // MAIN APP — with Auth
 // ════════════════════════════════════════════════════════
 export default function App(){
@@ -3590,22 +3641,39 @@ export default function App(){
   };
 
   const allTabs = [
-    {v:'report',   icon:'📊', l:'Dashboard & รายงาน', page:'dashboard'},
-    {v:'stock',    icon:'📦', l:'สต็อก',               page:'stock'},
-    {v:'products', icon:'🏷️', l:'สินค้า',              page:'products'},
-    {v:'sales',    icon:'💰', l:'บันทึกขาย',           page:'sales'},
-    {v:'plan',     icon:'🏭', l:'แผนผลิต',             page:'plan'},
-    {v:'po',       icon:'🛒', l:'สั่งซื้อ (PO)',        page:'po'},
-    {v:'orders',   icon:'📋', l:'คำสั่งซื้อ',            page:'orders'},
-    {v:'users',    icon:'👥', l:'จัดการผู้ใช้',         page:'users'},
-    {v:'settings', icon:'⚙️', l:'ตั้งค่าระบบ',          page:'settings'},
+    {v:'report',   icon:'📊', l:'รายงาน',           page:'dashboard'},
+    {v:'inventory',icon:'📦', l:'สต็อก & สินค้า',   page:'stock'},
+    {v:'selling',  icon:'💰', l:'ขาย & เอกสาร',     page:'sales'},
+    {v:'supply',   icon:'🏭', l:'ผลิต & สั่งซื้อ',   page:'plan'},
+    {v:'users',    icon:'👥', l:'ผู้ใช้',            page:'users'},
+    {v:'settings', icon:'⚙️', l:'ตั้งค่า',           page:'settings'},
   ];
-  const visibleTabs = allTabs.filter(t => can(t.page));
+  // For grouped tabs, check if user can access ANY page in the group
+  const groupPages = {
+    report:    ['dashboard'],
+    inventory: ['stock','products'],
+    selling:   ['sales','orders'],
+    supply:    ['plan','po'],
+    users:     ['users'],
+    settings:  ['settings'],
+  };
+  const visibleTabs = allTabs.filter(t => {
+    const pages = groupPages[t.v] || [t.page];
+    return isAdmin || pages.some(p => can(p));
+  });
 
   // Set default tab
   useEffect(()=>{
     if(!profile||!permissions) return;
-    const firstTab = allTabs.find(t=>can(t.page));
+    const groupPages = {
+      report:['dashboard'],inventory:['stock','products'],
+      selling:['sales','orders'],supply:['plan','po'],
+      users:['users'],settings:['settings'],
+    };
+    const firstTab = allTabs.find(t=>{
+      const pages=groupPages[t.v]||[t.page];
+      return isAdmin||pages.some(p=>can(p));
+    });
     if(firstTab) setTab(firstTab.v);
   },[profile,permissions]);
 
@@ -3647,22 +3715,20 @@ export default function App(){
         {/* Nav — only show allowed tabs */}
         <div style={S.nav}>
           {visibleTabs.map(t=>(
-            <button key={t.v} style={{...nbtn(tab===t.v),display:'flex',alignItems:'center',gap:5,flex:1,justifyContent:'center',fontSize:12}} onClick={()=>setTab(t.v)}>
-              <span>{t.icon}</span><span>{t.l}</span>
+            <button key={t.v} style={{...nbtn(tab===t.v),display:'flex',alignItems:'center',gap:5,flex:1,justifyContent:'center',fontSize:12,padding:'8px 6px'}} onClick={()=>setTab(t.v)}>
+              <span style={{fontSize:14}}>{t.icon}</span>
+              <span style={{display:'inline'}}>{t.l}</span>
             </button>
           ))}
         </div>
 
         {/* Pages — role-gated */}
-        {tab==='report'  &&can('dashboard') &&<ReportPage   stock={stock} sales={sales} permissions={permissions}/>}
-        {tab==='stock'   &&can('stock')     &&<StockPage    stock={stock} setStock={setStock} canEdit={can('stock','can_edit')} seeCost={can('stock','see_cost')}/>}
-        {tab==='products'&&can('products')  &&<ProductPage  products={products} setProducts={setProducts} stock={stock} setStock={setStock} canEdit={can('products','can_edit')}/>}
-        {tab==='sales'   &&can('sales')     &&<SalesPage    stock={stock} setStock={setStock} setSales={setSales} staff={staff} seeCost={can('sales','see_cost')} seeProfit={can('sales','see_profit')}/>}
-        {tab==='plan'    &&can('plan')      &&<PlanPage     stock={stock} sales={sales}/>}
-        {tab==='po'      &&can('po')        &&<POPage       stock={stock} sales={sales} products={products}/>}
-        {tab==='orders'  &&can('orders')    &&<OrdersPage   stock={stock} setStock={setStock} setSales={setSales}/>}
-        {tab==='users'   &&can('users')     &&<UserManagePage profile={profile}/>}
-        {tab==='settings'&&can('settings')  &&<SettingsPage permissions={permissions} setPermissions={setPermissions} profile={profile}/>}
+        {tab==='report'   &&<ReportPage   stock={stock} sales={sales} permissions={permissions}/>}
+        {tab==='inventory'&&<InventoryPage products={products} setProducts={setProducts} stock={stock} setStock={setStock} can={can}/>}
+        {tab==='selling'  &&<SellingPage   stock={stock} setStock={setStock} setSales={setSales} sales={sales} staff={staff} can={can}/>}
+        {tab==='supply'   &&<SupplyPage    stock={stock} setStock={setStock} sales={sales} products={products} can={can}/>}
+        {tab==='users'    &&can('users')   &&<UserManagePage profile={profile}/>}
+        {tab==='settings' &&can('settings')&&<SettingsPage permissions={permissions} setPermissions={setPermissions} profile={profile}/>}
       </div>
     </div>
   );
