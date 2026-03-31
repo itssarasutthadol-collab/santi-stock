@@ -29,55 +29,59 @@ function statLabel(t){ return t==='out'?'❌ หมดสต็อก':t==='low'
 
 // ── Design tokens ────────────────────────────────────────
 const T = {
-  dark:'#1B3A2D', mid:'#2D5C45', light:'#EFF7F3',
+  // Santi Panich Brand Colors
+  dark:'#B01020',    // Primary Red (brand)
+  mid: '#C8102E',    // Brand Red
+  light:'#FFF5F5',   // Red tint bg
   gold:'#B8860B', goldLight:'#FDF6E3',
   green:'#16A34A', greenLight:'#DCFCE7',
-  red:'#DC2626', redLight:'#FEE2E2',
+  red:'#C8102E',   redLight:'#FEE2E2',
   amber:'#D97706', amberLight:'#FEF3C7',
-  blue:'#1D4ED8', blueLight:'#DBEAFE',
-  gray:'#6B7280', grayLight:'#F9FAFB',
+  blue:'#1D4ED8',  blueLight:'#DBEAFE',
+  gray:'#6B7280',  grayLight:'#F9FAFB',
   border:'#E5E7EB', borderDark:'#D1D5DB',
-  white:'#FFFFFF', bg:'#F8FAF9',
-  text:'#111827', textMuted:'#6B7280',
-  radius:8, radiusLg:12, radiusFull:9999,
+  white:'#FFFFFF',  bg:'#FAFAFA',
+  text:'#1A1A1A',   textMuted:'#6B7280',
+  radius:6, radiusLg:10, radiusFull:9999,
 };
 
 const S = {
-  wrap:{ maxWidth:1200,margin:'0 auto',padding:'0 12px 80px',fontFamily:"'Noto Sans Thai',Arial,sans-serif",fontSize:13,color:T.text,background:T.bg,minHeight:'100vh' },
-  hdr:{ background:`linear-gradient(135deg, ${T.dark} 0%, ${T.mid} 100%)`,color:'#EFF7F3',padding:'14px 20px',borderRadius:T.radiusLg,marginBottom:16,display:'flex',justifyContent:'space-between',alignItems:'center',boxShadow:'0 2px 8px rgba(27,58,45,0.3)' },
-  nav:{ display:'flex',gap:4,marginBottom:16,flexWrap:'wrap',padding:'6px',background:T.white,borderRadius:T.radiusLg,border:`1px solid ${T.border}`,boxShadow:'0 1px 3px rgba(0,0,0,0.06)' },
-  card:{ background:T.white,border:`1px solid ${T.border}`,borderRadius:T.radiusLg,padding:'1.1rem 1.3rem',marginBottom:12,boxShadow:'0 1px 3px rgba(0,0,0,0.06)' },
-  cardTitle:{ fontWeight:600,fontSize:14,color:T.dark,marginBottom:12,display:'flex',alignItems:'center',gap:6 },
+  wrap:{ maxWidth:1200,margin:'0 auto',padding:'0 12px 80px',fontFamily:"'Noto Sans Thai','Helvetica Neue',Arial,sans-serif",fontSize:13,color:T.text,background:T.bg,minHeight:'100vh' },
+  hdr:{ background:T.dark,color:'#FFFFFF',padding:'0 20px',borderRadius:0,marginBottom:0,display:'flex',justifyContent:'space-between',alignItems:'center',boxShadow:'0 2px 12px rgba(176,16,32,0.25)',height:56,position:'sticky',top:0,zIndex:100 },
+  nav:{ display:'flex',gap:2,marginBottom:16,marginTop:8,flexWrap:'wrap',padding:'4px',background:T.white,borderRadius:T.radius,border:`1px solid ${T.border}`,boxShadow:'0 1px 4px rgba(0,0,0,0.08)' },
+  card:{ background:T.white,border:`1px solid ${T.border}`,borderRadius:T.radius,padding:'1.1rem 1.3rem',marginBottom:12,boxShadow:'0 1px 4px rgba(0,0,0,0.06)' },
+  cardTitle:{ fontWeight:700,fontSize:12,color:'#1A1A1A',marginBottom:12,display:'flex',alignItems:'center',gap:8,textTransform:'uppercase',letterSpacing:'0.06em',borderLeft:'3px solid #C8102E',paddingLeft:8 },
   kgrid:{ display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(155px,1fr))',gap:10,marginBottom:14 },
-  inp:{ padding:'8px 11px',border:`1px solid ${T.borderDark}`,borderRadius:T.radius,fontSize:13,outline:'none',background:T.white,color:T.text,transition:'border-color 0.15s' },
+  inp:{ padding:'8px 11px',border:`1.5px solid ${T.borderDark}`,borderRadius:T.radius,fontSize:13,outline:'none',background:T.white,color:T.text,transition:'border-color 0.15s',fontFamily:'inherit' },
   tbl:{ width:'100%',borderCollapse:'separate',borderSpacing:0,fontSize:12 },
-  th:{ background:T.dark,color:'#EFF7F3',padding:'9px 10px',textAlign:'left',fontWeight:500,fontSize:11,letterSpacing:'0.03em' },
-  thFirst:{ borderRadius:'6px 0 0 0' }, thLast:{ borderRadius:'0 6px 0 0' },
+  th:{ background:'#C8102E',color:'#FFFFFF',padding:'9px 10px',textAlign:'left',fontWeight:700,fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase' },
+  thFirst:{ borderRadius:'4px 0 0 0' }, thLast:{ borderRadius:'0 4px 0 0' },
   tow:{ overflowX:'auto',borderRadius:T.radius,border:`1px solid ${T.border}` },
   row:{ display:'flex',gap:8,alignItems:'center',flexWrap:'wrap' },
 };
 
 const btn=(v='dk',ex={})=>{
   const m={
-    dk:{ bg:T.dark,fg:'#EFF7F3',hov:'#243d30' },
+    dk:{ bg:'#1A1A1A',fg:'#FFFFFF',hov:'#333' },
     bl:{ bg:'#1A5276',fg:'#fff',hov:'#154360' },
-    gr:{ bg:T.green,fg:'#fff',hov:'#15803d' },
-    rd:{ bg:T.red,fg:'#fff',hov:'#b91c1c' },
+    gr:{ bg:'#16A34A',fg:'#fff',hov:'#15803d' },
+    rd:{ bg:T.red,fg:'#fff',hov:'#A00C1E' },
     gy:{ bg:'#E5E7EB',fg:'#374151',hov:'#D1D5DB' },
     am:{ bg:T.amber,fg:'#fff',hov:'#b45309' },
     gl:{ bg:T.gold,fg:'#fff',hov:'#a07218' },
-    out:{ bg:'transparent',fg:T.dark,hov:T.light,border:`1px solid ${T.dark}` },
+    brand:{ bg:T.dark,fg:'#fff',hov:T.mid },
+    out:{ bg:'transparent',fg:'#1A1A1A',hov:'#f5f5f5',border:'1px solid #1A1A1A' },
   };
   const s=m[v]||m.dk;
   return { padding:'8px 16px',background:s.bg,color:s.fg,border:s.border||'none',borderRadius:T.radius,fontWeight:500,cursor:'pointer',fontSize:13,fontFamily:'inherit',...ex };
 };
-const nbtn=a=>({ padding:'8px 16px',borderRadius:T.radius,border:'none',background:a?T.dark:'transparent',color:a?'#EFF7F3':T.textMuted,fontWeight:a?500:400,cursor:'pointer',fontSize:13,fontFamily:'inherit',transition:'all 0.15s' });
-const tdr=i=>({ padding:'8px 10px',borderBottom:`1px solid ${T.border}`,background:i%2===0?T.grayLight:T.white,fontSize:12 });
+const nbtn=a=>({ padding:'8px 14px',borderRadius:T.radius,border:'none',background:a?'#1A1A1A':'transparent',color:a?'#FFFFFF':T.textMuted,fontWeight:a?700:400,cursor:'pointer',fontSize:12,fontFamily:'inherit',transition:'all 0.15s',letterSpacing:a?'0.04em':'0' });
+const tdr=i=>({ padding:'8px 10px',borderBottom:`1px solid ${T.border}`,background:i%2===0?'#FAFAFA':'#FFFFFF',fontSize:12 });
 const bdg=t=>t==='out'
-  ?{ background:T.redLight,color:T.red,borderRadius:T.radiusFull,padding:'3px 10px',fontSize:11,fontWeight:500,display:'inline-block',whiteSpace:'nowrap' }
+  ?{ background:'#FEE2E2',color:'#C8102E',borderRadius:2,padding:'2px 8px',fontSize:10,fontWeight:700,display:'inline-block',whiteSpace:'nowrap',letterSpacing:'0.04em',textTransform:'uppercase' }
   :t==='low'
-  ?{ background:T.amberLight,color:T.amber,borderRadius:T.radiusFull,padding:'3px 10px',fontSize:11,fontWeight:500,display:'inline-block',whiteSpace:'nowrap' }
-  :{ background:T.greenLight,color:T.green,borderRadius:T.radiusFull,padding:'3px 10px',fontSize:11,fontWeight:500,display:'inline-block',whiteSpace:'nowrap' };
+  ?{ background:'#FEF3C7',color:'#B45309',borderRadius:2,padding:'2px 8px',fontSize:10,fontWeight:700,display:'inline-block',whiteSpace:'nowrap',letterSpacing:'0.04em',textTransform:'uppercase' }
+  :{ background:'#DCFCE7',color:'#15803D',borderRadius:2,padding:'2px 8px',fontSize:10,fontWeight:700,display:'inline-block',whiteSpace:'nowrap',letterSpacing:'0.04em',textTransform:'uppercase' };
 
 // ── KPI Card ──────────────────────────────────────────────
 function KPI({label,value,sub,color=T.dark,bg=T.grayLight,icon}){
@@ -1857,12 +1861,24 @@ function LoginPage({onLogin}){
   };
 
   return(
-    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#1B3A2D 0%,#2D5C45 100%)'}}>
-      <div style={{background:'#fff',borderRadius:16,padding:'40px 36px',width:360,boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
-        <div style={{textAlign:'center',marginBottom:28}}>
-          <div style={{fontSize:40,marginBottom:8}}>☕</div>
-          <div style={{fontWeight:700,fontSize:20,color:'#1B3A2D'}}>สันติพาณิชย์</div>
-          <div style={{fontSize:13,color:'#888',marginTop:4}}>Stock Management System</div>
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#C8102E',position:'relative',overflow:'hidden'}}>
+      {/* BG pattern */}
+      <div style={{position:'absolute',inset:0,opacity:0.08,backgroundImage:'repeating-linear-gradient(45deg,#fff 0,#fff 1px,transparent 0,transparent 50%)',backgroundSize:'20px 20px'}}/>
+      <div style={{background:'#fff',borderRadius:8,padding:'44px 40px',width:380,boxShadow:'0 32px 80px rgba(0,0,0,0.35)',position:'relative',zIndex:1}}>
+        <div style={{textAlign:'center',marginBottom:32}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:12,marginBottom:12}}>
+            <div style={{width:48,height:48,background:'#C8102E',borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <svg viewBox="0 0 100 100" style={{width:36,height:36}}>
+                <text x="50" y="74" textAnchor="middle" fontSize="74" fontFamily="serif" fill="#FFFFFF" fontWeight="bold">ส</text>
+              </svg>
+            </div>
+            <div style={{textAlign:'left'}}>
+              <div style={{fontWeight:900,fontSize:20,color:'#1A1A1A',letterSpacing:'0.08em',lineHeight:1.1,fontFamily:"'Helvetica Neue',Arial,sans-serif"}}>SANTI PANICH</div>
+              <div style={{fontSize:10,color:'#999',letterSpacing:'0.14em',fontWeight:500}}>COFFEE ROASTER</div>
+            </div>
+          </div>
+          <div style={{width:40,height:2,background:'#C8102E',margin:'0 auto 12px'}}/>
+          <div style={{fontSize:12,color:'#888',letterSpacing:'0.08em',fontWeight:500}}>STOCK MANAGEMENT SYSTEM</div>
         </div>
         <form onSubmit={doLogin}>
           <div style={{marginBottom:14}}>
@@ -1876,8 +1892,8 @@ function LoginPage({onLogin}){
               placeholder="••••••••" value={pass} onChange={e=>setPass(e.target.value)}/>
           </div>
           {error&&<div style={{background:'#FEE2E2',color:'#DC2626',padding:'9px 12px',borderRadius:7,fontSize:12,marginBottom:14,fontWeight:500}}>{error}</div>}
-          <button type="submit" disabled={loading} style={{width:'100%',padding:'12px 0',background:'#1B3A2D',color:'#EFF7F3',border:'none',borderRadius:8,fontSize:15,fontWeight:600,cursor:'pointer'}}>
-            {loading?'กำลังเข้าสู่ระบบ...':'เข้าสู่ระบบ'}
+          <button type="submit" disabled={loading} style={{width:'100%',padding:'13px 0',background:'#C8102E',color:'#FFFFFF',border:'none',borderRadius:5,fontSize:13,fontWeight:700,cursor:'pointer',letterSpacing:'0.08em',fontFamily:'inherit',transition:'background 0.2s'}}>
+            {loading?'กำลังเข้าสู่ระบบ...':'SIGN IN'}
           </button>
         </form>
       </div>
@@ -3725,17 +3741,28 @@ export default function App(){
   },[profile,permissions]);
 
   if(authLoading) return(
-    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#1B3A2D,#2D5C45)',flexDirection:'column',gap:12,color:'#EFF7F3',fontFamily:"Arial,sans-serif"}}>
-      <div style={{fontSize:48}}>☕</div>
-      <div style={{fontSize:14}}>กำลังโหลด...</div>
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#C8102E',flexDirection:'column',gap:16,fontFamily:"Arial,sans-serif"}}>
+      <div style={{width:56,height:56,background:'#FFFFFF',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center'}}>
+        <svg viewBox="0 0 100 100" style={{width:44,height:44}}>
+          <text x="50" y="74" textAnchor="middle" fontSize="74" fontFamily="serif" fill="#C8102E" fontWeight="bold">ส</text>
+        </svg>
+      </div>
+      <div style={{color:'#FFFFFF',fontSize:12,letterSpacing:'0.12em',fontWeight:600}}>SANTI PANICH</div>
+      <div style={{color:'rgba(255,255,255,0.7)',fontSize:11,letterSpacing:'0.06em'}}>กำลังโหลด...</div>
     </div>
   );
 
   if(!user||!profile) return <LoginPage onLogin={(u,p)=>{setUser(u);setProfile(p);}}/>;
 
   if(loading) return(
-    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:12,color:T.textMuted,fontFamily:"Arial,sans-serif"}}>
-      <div style={{fontSize:40}}>☕</div><div>กำลังโหลดข้อมูล...</div>
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,fontFamily:"Arial,sans-serif",background:'#fafafa'}}>
+      <div style={{width:48,height:48,background:'#C8102E',borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center'}}>
+        <svg viewBox="0 0 100 100" style={{width:36,height:36}}>
+          <text x="50" y="74" textAnchor="middle" fontSize="74" fontFamily="serif" fill="#FFFFFF" fontWeight="bold">ส</text>
+        </svg>
+      </div>
+      <div style={{color:'#1A1A1A',fontSize:12,letterSpacing:'0.1em',fontWeight:700}}>SANTI PANICH</div>
+      <div style={{color:'#888',fontSize:11}}>กำลังโหลดข้อมูล...</div>
     </div>
   );
   if(error) return <div style={{padding:40,color:T.red,fontFamily:"Arial,sans-serif"}}>❌ {error}</div>;
@@ -3743,7 +3770,29 @@ export default function App(){
   return(
     <div style={{background:T.bg,minHeight:'100vh'}}>
       <div style={S.wrap}>
-        {/* Header */}
+        {/* Header — Santi Panich Brand */}
+        <div style={S.hdr}>
+          <div style={{display:'flex',alignItems:'center',gap:12}}>
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              <div style={{width:36,height:36,background:'#FFFFFF',borderRadius:4,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                <svg viewBox="0 0 100 100" style={{width:28,height:28}}>
+                  <text x="50" y="74" textAnchor="middle" fontSize="74" fontFamily="serif" fill="#C8102E" fontWeight="bold">ส</text>
+                </svg>
+              </div>
+              <div>
+                <div style={{fontWeight:800,fontSize:14,letterSpacing:'0.1em',color:'#FFFFFF',fontFamily:"'Helvetica Neue',Arial,sans-serif",lineHeight:1.1}}>SANTI PANICH</div>
+                <div style={{fontSize:9,color:'rgba(255,255,255,0.65)',letterSpacing:'0.14em',fontWeight:500,marginTop:1}}>COFFEE ROASTER · STOCK</div>
+              </div>
+            </div>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:12}}>
+            <div style={{textAlign:'right'}}>
+              <div style={{fontSize:11,color:'rgba(255,255,255,0.95)',fontWeight:600}}>{{'admin':'👑 Admin','manager':'📊 Manager','sales':'💰 Sales','warehouse':'📦 Warehouse','production':'🏭 Production','accounting':'🧾 Accounting','viewer':'👁️ Viewer'}[profile.role]||profile.role}</div>
+              <div style={{fontSize:10,color:'rgba(255,255,255,0.55)'}}>{profile.full_name||profile.email} · {PR.length} SKU</div>
+            </div>
+            <button onClick={logout} style={{padding:'6px 14px',background:'rgba(255,255,255,0.12)',color:'#FFFFFF',border:'1px solid rgba(255,255,255,0.25)',borderRadius:4,cursor:'pointer',fontSize:11,fontWeight:700,letterSpacing:'0.06em',fontFamily:'inherit'}}>LOGOUT</button>
+          </div>
+        </div>{/* Header */}
         <div style={S.hdr}>
           <div>
             <div style={{fontWeight:700,fontSize:16,letterSpacing:'0.02em'}}>☕ สันติพาณิชย์ Stock</div>
