@@ -2792,7 +2792,20 @@ function OrdersPage({stock, setStock, setSales}){
     if(error){setMsg('❌ '+error.message);setSaving(false);return;}
     setMsg('✅ สร้าง '+orderData.doc_number+' เรียบร้อย');
     setOrders(prev=>[newOrder,...prev]);
-    // ถ้าชำระแล้ว ตัดสต็อก
+    // ถ้าชำระแล้ว sync ไป sales state ด้วย
+    if(status==='paid'){
+      const soEntry = {
+        id:'SO-'+newOrder.id, date:newOrder.created_at||new Date().toISOString(),
+        items:items.map(it=>({...it,subtotal:it.subtotal||(it.sell||0)*(it.qty||0)*(1-(it.discount_pct||0)/100)})),
+        total:grand, discount_amount:disc, total_after_discount:afterD,
+        vat_amount:vatAmt, total_after_vat:grand, note:orderNote, channel:'คำสั่งซื้อ',
+        customer_id:customer?.customer_id||null, customer_name:customer?.name||'',
+        staff_name:staffName, commission_amount:0, _source:'sales_order',
+        _doc_number:orderData.doc_number,
+      };
+      setSales(prev=>[soEntry,...prev]);
+    }
+    // ตัดสต็อก
     if(status==='paid'){
       const ns={...stock}; const ups=[];
       for(const it of items){
@@ -2826,8 +2839,19 @@ function OrdersPage({stock, setStock, setSales}){
     await supabase.from('stock').upsert(ups,{onConflict:'sku'});
     setStock(ns);
     setOrders(prev=>prev.map(o=>o.id===order.id?{...o,status:'paid',payment_method:payMethod}:o));
+    // เพิ่มเข้า sales state เพื่อให้ Dashboard/Report เห็นทันที
+    const soEntry = {
+      id:'SO-'+order.id, date:order.created_at||new Date().toISOString(),
+      items:(order.items||[]).map((it:any)=>({...it,subtotal:it.subtotal||(it.sell||0)*(it.qty||0)*(1-(it.discount_pct||0)/100)})),
+      total:order.total||0, discount_amount:order.discount_amount||0,
+      total_after_discount:order.after_discount||order.total||0,
+      vat_amount:order.vat_amount||0, total_after_vat:order.total||0, note:order.note||'', channel:'คำสั่งซื้อ',
+      customer_id:order.customer_id, customer_name:order.customer_name||'',
+      staff_name:order.staff_name||'', commission_amount:0,
+      _source:'sales_order', _doc_number:order.doc_number,
+    };
+    setSales(prev=>[soEntry,...prev]);
     setMsg('✅ อัพเดทสถานะชำระแล้ว');
-    // Print receipt
     const updated = {...order, status:'paid', payment_method:payMethod};
     printDoc({...updated, doc_type:'tax_invoice'});
   };
@@ -3600,12 +3624,13 @@ export default function App(){
     (async()=>{
       setLoading(true);
       // Load permissions for this role
-      const [permRes,prodRes,stRes,staffRes,salRes] = await Promise.all([
+      const [permRes,prodRes,stRes,staffRes,salRes,soRes] = await Promise.all([
         supabase.from('role_permissions').select('*').eq('role', profile.role),
         supabase.from('products').select('*').order('cat').order('name'),
         supabase.from('stock').select('*'),
         supabase.from('staff').select('*').eq('active',true).order('name'),
         supabase.from('sales').select('*').order('date',{ascending:false}).limit(2000),
+        supabase.from('sales_orders').select('*').eq('status','paid').order('created_at',{ascending:false}).limit(2000),
       ]);
       // Build permission map
       const permMap = {};
@@ -3621,7 +3646,29 @@ export default function App(){
       (stRes.data||[]).forEach(r=>{ sm[r.sku]={qty:r.qty,safety:r.safety,cost:r.cost}; });
       setStock(sm);
       setStaff(staffRes.data||[]);
-      setSales(salRes.data||[]);
+
+      // รวม sales + sales_orders(paid) เข้าด้วยกัน เพื่อให้ Dashboard/Report เห็นทั้งหมด
+      const salesData = salRes.data||[];
+      const soData = (soRes.data||[]).map(o=>({
+        id:              'SO-'+o.id,
+        date:            o.created_at,
+        items:           (o.items||[]).map((it:any)=>({...it, subtotal: it.subtotal||(it.sell||0)*(it.qty||0)*(1-(it.discount_pct||0)/100)})),
+        total:           o.total||0,
+        discount_amount: o.discount_amount||0,
+        total_after_discount: o.after_discount||o.total||0,
+        vat_amount:      o.vat_amount||0,
+        total_after_vat: o.total||0,
+        note:            o.note||'',
+        channel:         'คำสั่งซื้อ',
+        customer_id:     o.customer_id,
+        customer_name:   o.customer_name||'',
+        staff_name:      o.staff_name||'',
+        commission_amount: 0,
+        _source:         'sales_order',
+        _doc_number:     o.doc_number,
+        _doc_type:       o.doc_type,
+      }));
+      setSales([...salesData, ...soData].sort((a,b)=>new Date(b.date).getTime()-new Date(a.date).getTime()));
       setLoading(false);
     })();
   },[user,profile]);
