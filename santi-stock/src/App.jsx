@@ -2143,6 +2143,13 @@ function SettingsPage({permissions, setPermissions, profile}){
   const [msg,     setMsg]     = useState('');
   const [activeTab, setActiveTab] = useState('permissions');
 
+  // LINE settings
+  const [lineToken,  setLineToken]  = useState(()=>localStorage.getItem('line_bot_token')||'');
+  const [lineGroups, setLineGroups] = useState([]);
+  const [lineMsg,    setLineMsg]    = useState('');
+  const [testingLine,setTestingLine]= useState(false);
+  const [newGroup,   setNewGroup]   = useState({group_id:'',name:'',roles:['admin'],notify_stock:true,notify_sales:true,notify_daily:true});
+
   // Company settings
   const [company, setCompany] = useState({
     name:   'บริษัท สันติพาณิชย์ โรสเตอร์ จำกัด',
@@ -2153,7 +2160,37 @@ function SettingsPage({permissions, setPermissions, profile}){
 
   useEffect(()=>{
     loadMatrix();
+    loadLineGroups();
   },[]);
+
+  const loadLineGroups = async () => {
+    const {data} = await supabase.from('line_groups').select('*').order('name');
+    setLineGroups(data||[]);
+  };
+
+  const saveLineGroup = async () => {
+    if(!newGroup.group_id||!newGroup.name){setLineMsg('❌ กรอก Group ID และชื่อ');return;}
+    const {error} = await supabase.from('line_groups').upsert([newGroup],{onConflict:'group_id'});
+    if(error){setLineMsg('❌ '+error.message);return;}
+    setLineMsg('✅ บันทึก Group เรียบร้อย');
+    setNewGroup({group_id:'',name:'',roles:['admin'],notify_stock:true,notify_sales:true,notify_daily:true});
+    loadLineGroups();
+  };
+
+  const testPush = async () => {
+    const token = localStorage.getItem('line_bot_token')||lineToken;
+    if(!token){setLineMsg('❌ ยังไม่ได้ใส่ Channel Access Token');return;}
+    if(!lineGroups.length){setLineMsg('❌ ยังไม่มี Group ที่ตั้งค่าไว้');return;}
+    setTestingLine(true); setLineMsg('');
+    const g = lineGroups[0];
+    try {
+      const res = await fetch(`${(await supabase.auth.getSession()).data.session?.access_token?'':''}`);
+      setLineMsg('⚠️ ต้อง Deploy Edge Function ก่อน — ดูขั้นตอนในคู่มือ');
+    } catch(e) {
+      setLineMsg('⚠️ ต้อง Deploy Edge Function ก่อน — ดูขั้นตอนในคู่มือ');
+    }
+    setTestingLine(false);
+  };
 
   const loadMatrix = async () => {
     setLoading(true);
@@ -2224,7 +2261,7 @@ function SettingsPage({permissions, setPermissions, profile}){
     <div>
       {/* Sub-tabs */}
       <div style={{...S.nav,marginBottom:14}}>
-        {[['permissions','🔐 จัดการสิทธิ์'],['company','🏢 ข้อมูลบริษัท']].map(([v,l])=>(
+        {[['permissions','🔐 จัดการสิทธิ์'],['line','💬 LINE Bot'],['company','🏢 ข้อมูลบริษัท']].map(([v,l])=>(
           <button key={v} style={nbtn(activeTab===v)} onClick={()=>setActiveTab(v)}>{l}</button>
         ))}
       </div>
@@ -2354,6 +2391,106 @@ function SettingsPage({permissions, setPermissions, profile}){
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab==='line'&&(
+        <div>
+          {lineMsg&&<div style={{...S.card,background:lineMsg.startsWith('✅')?T.greenLight:lineMsg.startsWith('⚠️')?T.amberLight:T.redLight,color:lineMsg.startsWith('✅')?T.green:lineMsg.startsWith('⚠️')?T.amber:T.red,fontWeight:500,marginBottom:12}}>{lineMsg}</div>}
+
+          {/* Channel Access Token */}
+          <div style={S.card}>
+            <div style={S.cardTitle}>🔑 Channel Access Token</div>
+            <div style={{fontSize:12,color:T.textMuted,marginBottom:8,lineHeight:1.7}}>
+              ดูได้จาก LINE Developers Console → Channel → Messaging API → Channel access token
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <input type="password" style={{...S.inp,flex:1}} placeholder="Channel access token..."
+                value={lineToken} onChange={e=>setLineToken(e.target.value)}/>
+              <button style={btn('dk')} onClick={()=>{localStorage.setItem('line_bot_token',lineToken);setLineMsg('✅ บันทึก Token แล้ว');}}>บันทึก</button>
+            </div>
+          </div>
+
+          {/* Webhook setup guide */}
+          <div style={S.card}>
+            <div style={S.cardTitle}>⚙️ ขั้นตอนตั้งค่า Webhook</div>
+            <div style={{background:T.blueLight,borderRadius:T.radius,padding:'12px 14px',fontSize:12,color:T.blue,lineHeight:2}}>
+              <b>1. Deploy Edge Function ใน Supabase:</b><br/>
+              &nbsp;&nbsp;Terminal → <code style={{background:'#fff',padding:'1px 6px',borderRadius:4}}>supabase functions deploy line-bot</code><br/>
+              <b>2. ตั้งค่า Environment Variables:</b><br/>
+              &nbsp;&nbsp;Supabase Dashboard → Settings → Edge Functions → Add:<br/>
+              &nbsp;&nbsp;<code style={{background:'#fff',padding:'1px 6px',borderRadius:4}}>LINE_CHANNEL_ACCESS_TOKEN</code> = token ของคุณ<br/>
+              &nbsp;&nbsp;<code style={{background:'#fff',padding:'1px 6px',borderRadius:4}}>LINE_CHANNEL_SECRET</code> = secret ของคุณ<br/>
+              <b>3. ตั้งค่า Webhook URL ใน LINE Developers:</b><br/>
+              &nbsp;&nbsp;<code style={{background:'#fff',padding:'1px 6px',borderRadius:4,wordBreak:'break-all'}}>https://[project-id].supabase.co/functions/v1/line-bot</code><br/>
+              <b>4. เปิดใช้ Webhook</b> และกด Verify ใน LINE Developers Console
+            </div>
+          </div>
+
+          {/* LINE Groups */}
+          <div style={S.card}>
+            <div style={S.cardTitle}>👥 กลุ่ม LINE สำหรับแจ้งเตือน</div>
+            <div style={{fontSize:12,color:T.textMuted,marginBottom:10,lineHeight:1.7}}>
+              เพิ่ม Bot เข้า group LINE → พิมพ์ "help" ใน group → Bot จะตอบพร้อมแสดง Group ID ให้
+            </div>
+
+            {/* Add group form */}
+            <div style={{background:T.grayLight,borderRadius:T.radius,padding:'12px 14px',marginBottom:12}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px 12px',marginBottom:8}}>
+                <div>
+                  <div style={{fontSize:12,color:T.textMuted,marginBottom:3}}>Group ID</div>
+                  <input style={{...S.inp,width:'100%'}} placeholder="C1234567890abcdef..."
+                    value={newGroup.group_id} onChange={e=>setNewGroup(g=>({...g,group_id:e.target.value}))}/>
+                </div>
+                <div>
+                  <div style={{fontSize:12,color:T.textMuted,marginBottom:3}}>ชื่อ Group</div>
+                  <input style={{...S.inp,width:'100%'}} placeholder="เช่น กลุ่มทีมขาย"
+                    value={newGroup.name} onChange={e=>setNewGroup(g=>({...g,name:e.target.value}))}/>
+                </div>
+              </div>
+              <div style={{...S.row,gap:16,marginBottom:8,fontSize:12}}>
+                {[['notify_stock','🔔 สต็อกหมด'],['notify_sales','💰 ยอดขาย'],['notify_daily','📊 รายวัน']].map(([k,l])=>(
+                  <label key={k} style={{display:'flex',alignItems:'center',gap:4,cursor:'pointer'}}>
+                    <input type="checkbox" checked={newGroup[k]} onChange={e=>setNewGroup(g=>({...g,[k]:e.target.checked}))}/>
+                    {l}
+                  </label>
+                ))}
+              </div>
+              <button style={btn('dk',{fontSize:12})} onClick={saveLineGroup}>➕ เพิ่ม Group</button>
+            </div>
+
+            {/* Groups list */}
+            {lineGroups.length>0&&(
+              <div style={S.tow}>
+                <table style={S.tbl}>
+                  <thead><tr>{['ชื่อ Group','Group ID','แจ้งเตือน','สถานะ'].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead>
+                  <tbody>{lineGroups.map((g,i)=>(
+                    <tr key={g.id}>
+                      <td style={{...tdr(i),fontWeight:500}}>{g.name}</td>
+                      <td style={{...tdr(i),fontSize:10,color:T.textMuted}}>{g.group_id}</td>
+                      <td style={tdr(i)}>
+                        {g.notify_stock&&<span style={{...bdg('ok'),marginRight:4,fontSize:10}}>สต็อก</span>}
+                        {g.notify_sales&&<span style={{...bdg('ok'),marginRight:4,fontSize:10}}>ยอดขาย</span>}
+                        {g.notify_daily&&<span style={{...bdg('ok'),fontSize:10}}>รายวัน</span>}
+                      </td>
+                      <td style={tdr(i)}><span style={bdg(g.active?'ok':'out')}>{g.active?'ใช้งาน':'ปิด'}</span></td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Link LINE account */}
+          <div style={S.card}>
+            <div style={S.cardTitle}>🔗 ผูก LINE ID กับบัญชีผู้ใช้</div>
+            <div style={{fontSize:12,color:T.textMuted,lineHeight:1.7}}>
+              ทีมงานแต่ละคนผูก LINE ได้โดย:<br/>
+              1. เพิ่ม <b>สันติพาณิชย์ Bot</b> เป็นเพื่อนใน LINE<br/>
+              2. พิมพ์ <code style={{background:T.grayLight,padding:'1px 6px',borderRadius:4}}>/link [อีเมลที่ใช้ login]</code><br/>
+              3. ระบบจะผูก LINE ID กับบัญชีและส่งแจ้งเตือนตาม Role อัตโนมัติ
             </div>
           </div>
         </div>
