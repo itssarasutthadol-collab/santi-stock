@@ -627,7 +627,14 @@ function SalesPage({stock, setStock, setSales, sales, staff, seeCost, seeProfit}
   // ── UI state ──────────────────────────────────────────────
   const [saving,      setSaving]      = useState(false);
   const [msg,         setMsg]         = useState('');
-  const [tab,         setTab]         = useState('create'); // create / history
+  const [tab,         setTab]         = useState('create'); // create / history / import
+  // Import states
+  const [importFile,  setImportFile]  = useState(null);
+  const [importData,  setImportData]  = useState([]); // parsed rows grouped by invoice
+  const [importing,   setImporting]   = useState(false);
+  const [importMsg,   setImportMsg]   = useState('');
+  const [importPreview, setImportPreview] = useState([]);
+  const [importDone,  setImportDone]  = useState({ok:0, skip:0, errors:[]});
   const [orders,      setOrders]      = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
   // ── Edit order state ──────────────────────────────────────
@@ -944,6 +951,7 @@ function SalesPage({stock, setStock, setSales, sales, staff, seeCost, seeProfit}
       <div style={{...S.nav,marginBottom:12}}>
         <button style={{...nbtn(tab==='create'),flex:1,textAlign:'center'}} onClick={()=>setTab('create')}>➕ สร้างรายการขาย</button>
         <button style={{...nbtn(tab==='history'),flex:1,textAlign:'center'}} onClick={()=>setTab('history')}>📋 ประวัติ ({orders.length})</button>
+        <button style={{...nbtn(tab==='import'),flex:1,textAlign:'center'}} onClick={()=>setTab('import')}>📥 Import SME Move</button>
       </div>
 
       {msg&&<div style={{...S.card,background:msg.startsWith('✅')?T.greenLight:T.redLight,color:msg.startsWith('✅')?T.green:T.red,fontWeight:500,marginBottom:10}}>{msg}</div>}
@@ -1212,6 +1220,141 @@ function SalesPage({stock, setStock, setSales, sales, staff, seeCost, seeProfit}
               </div>
             </div>
           )}
+        </div>
+      )}
+
+
+      {/* ── IMPORT TAB ─────────────────────────────────── */}
+      {tab==='import'&&(
+        <div>
+          {importMsg&&<div style={{...S.card,background:importMsg.startsWith('✅')?T.greenLight:importMsg.startsWith('⚠️')?T.amberLight:T.redLight,color:importMsg.startsWith('✅')?T.green:importMsg.startsWith('⚠️')?T.amber:T.red,fontWeight:500,marginBottom:10}}>{importMsg}</div>}
+          <div style={S.card}>
+            <div style={S.cardTitle}>📥 Import ยอดขายจาก SME Move</div>
+            <div style={{fontSize:12,color:T.textMuted,lineHeight:1.8,marginBottom:14}}>
+              ✅ รองรับไฟล์ Excel (.xlsx) ที่ export จาก SME Move หน้า Billing<br/>
+              ✅ import เฉพาะสถานะ <b>"ได้รับเงินแล้ว"</b> เท่านั้น<br/>
+              ✅ Group สินค้าหลายรายการในใบเดียวกันอัตโนมัติ<br/>
+              ⚠️ เลขที่ใบซ้ำกับที่มีอยู่แล้วจะข้ามไป
+            </div>
+            <label style={{display:'block',border:`2px dashed ${importFile?T.green:T.border}`,borderRadius:T.radius,padding:'28px 20px',textAlign:'center',cursor:'pointer',background:importFile?T.greenLight:'#fafafa',marginBottom:12}}>
+              <input type="file" accept=".xlsx,.xls" style={{display:'none'}} onChange={e=>{
+                const f=e.target.files?.[0]; if(!f) return;
+                setImportFile(f); setImportPreview([]); setImportData([]); setImportMsg('');
+                const reader=new FileReader();
+                reader.onload=ev=>{
+                  try{
+                    const XLSX=window.XLSX;
+                    if(!XLSX){setImportMsg('❌ ไม่พบ XLSX library');return;}
+                    const wb=XLSX.read(ev.target.result,{type:'array',cellDates:true});
+                    const ws=wb.Sheets[wb.SheetNames[0]];
+                    const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,dateNF:'yyyy-mm-dd'});
+                    if(!rows.length){setImportMsg('❌ ไฟล์ว่างเปล่า');return;}
+                    const dataRows=rows.slice(1).filter(r=>r[1]==='ได้รับเงินแล้ว'&&r[4]);
+                    const invoiceMap={};
+                    dataRows.forEach(r=>{
+                      const inv=r[4]?.toString().trim(); if(!inv) return;
+                      if(!invoiceMap[inv]){
+                        const dateStr=r[2]?.toString().slice(0,10)||new Date().toISOString().slice(0,10);
+                        invoiceMap[inv]={
+                          doc_number:inv, receipt_num:r[0]?.toString().trim()||'',
+                          date:dateStr, channel:r[3]==='โอนเงิน'?'transfer':'In-store',
+                          customer_name:r[5]?.toString().trim()||'',
+                          note:r[10]?.toString().trim()||'',
+                          staff_name:r[15]?.toString().trim()||'',
+                          payment_info:r[12]?.toString().trim()||'',
+                          items:[], total:0, vat:0,
+                        };
+                      }
+                      const price=parseFloat(r[8])||0;
+                      const vatAmt=parseFloat(r[9])||0;
+                      const total=parseFloat(r[7])||0;
+                      const productName=r[6]?.toString().trim()||'';
+                      invoiceMap[inv].items.push({name:productName,qty:1,sell:price,unit_price:price,vat_amount:vatAmt,subtotal:total,cost:0,sku:'IMPORT-'+productName.slice(0,20).replace(/\s/g,'_')});
+                      invoiceMap[inv].total+=total;
+                      invoiceMap[inv].vat+=vatAmt;
+                    });
+                    const parsed=Object.values(invoiceMap);
+                    setImportData(parsed); setImportPreview(parsed.slice(0,10));
+                    setImportMsg(`✅ พบ ${parsed.length} ใบ จาก ${dataRows.length} แถว พร้อม import`);
+                  } catch(err){ setImportMsg('❌ อ่านไฟล์ไม่ได้: '+err.message); }
+                };
+                reader.readAsArrayBuffer(f);
+              }}/>
+              {importFile
+                ?<div><div style={{fontSize:22,marginBottom:4}}>✅</div><div style={{fontWeight:600,color:T.green}}>{importFile.name}</div><div style={{fontSize:12,color:T.textMuted}}>คลิกเพื่อเปลี่ยนไฟล์</div></div>
+                :<div><div style={{fontSize:32,marginBottom:8}}>📂</div><div style={{fontWeight:600,color:T.textMuted}}>คลิกหรือลากไฟล์ Excel มาวางที่นี่</div><div style={{fontSize:12,color:T.textMuted,marginTop:4}}>ไฟล์ .xlsx จาก SME Move → Export Billing</div></div>
+              }
+            </label>
+            {importPreview.length>0&&(
+              <div>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:8,fontWeight:600}}>ตัวอย่าง {Math.min(10,importData.length)} รายการแรก (จากทั้งหมด {importData.length} ใบ):</div>
+                <div style={{...S.tow,marginBottom:14}}>
+                  <table style={S.tbl}>
+                    <thead><tr>{['เลขที่ใบ','วันที่','ลูกค้า','สินค้า','มูลค่ารวม','พนักงาน'].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead>
+                    <tbody>{importPreview.map((inv,i)=>(
+                      <tr key={inv.doc_number}>
+                        <td style={{...tdr(i),fontWeight:600,color:T.blue,fontSize:11}}>{inv.doc_number}</td>
+                        <td style={{...tdr(i),fontSize:11}}>{inv.date}</td>
+                        <td style={tdr(i)}>{inv.customer_name||'-'}</td>
+                        <td style={tdr(i)}>{inv.items.slice(0,2).map(it=>it.name).join(', ')}{inv.items.length>2?` +${inv.items.length-2}`:''}</td>
+                        <td style={{...tdr(i),fontWeight:500}}>฿{fmt(inv.total)}</td>
+                        <td style={{...tdr(i),fontSize:11}}>{inv.staff_name||'-'}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                  <button style={{...btn('gr'),padding:'10px 24px',fontSize:13}} disabled={importing} onClick={async()=>{
+                    setImporting(true); setImportMsg('⏳ กำลัง import...');
+                    let ok=0, skip=0; const errors=[];
+                    const {data:existing}=await supabase.from('sales_orders').select('doc_number');
+                    const existingNums=new Set((existing||[]).map(o=>o.doc_number));
+                    for(const inv of importData){
+                      if(existingNums.has(inv.doc_number)){skip++;continue;}
+                      try{
+                        const subtotal=inv.items.reduce((s,it)=>s+(it.sell*it.qty),0);
+                        const {error}=await supabase.from('sales_orders').insert([{
+                          doc_number:inv.doc_number, doc_type:'receipt', status:'paid',
+                          customer_name:inv.customer_name, items:inv.items,
+                          subtotal, discount_amount:0, after_discount:subtotal,
+                          vat_amount:inv.vat, total:inv.total,
+                          payment_method:inv.channel, payment_note:inv.payment_info,
+                          payment_date:inv.date, staff_name:inv.staff_name, note:inv.note,
+                          created_at:new Date(inv.date+'T00:00:00+07:00').toISOString(),
+                        }]);
+                        if(error){errors.push(inv.doc_number+': '+error.message);}
+                        else{
+                          ok++;
+                          setSales(prev=>[{
+                            id:'IMP-'+inv.doc_number, date:new Date(inv.date+'T00:00:00+07:00').toISOString(),
+                            items:inv.items, total:inv.total, discount_amount:0,
+                            total_after_discount:subtotal, vat_amount:inv.vat, total_after_vat:inv.total,
+                            note:inv.note, channel:inv.channel,
+                            customer_name:inv.customer_name, staff_name:inv.staff_name, commission_amount:0,
+                            _source:'import', _doc_number:inv.doc_number,
+                          },...prev]);
+                        }
+                      } catch(e){errors.push(inv.doc_number+': '+e.message);}
+                    }
+                    setImporting(false);
+                    let m=`✅ Import สำเร็จ ${ok} ใบ`;
+                    if(skip) m+=` | ข้าม ${skip} ใบ (ซ้ำ)`;
+                    if(errors.length) m+=` | ❌ ล้มเหลว ${errors.length} ใบ`;
+                    setImportMsg(m); setImportDone({ok,skip,errors});
+                    setImportFile(null); setImportData([]); setImportPreview([]);
+                    await loadOrders();
+                  }}>📥 Import {importData.length} ใบ เข้าระบบ</button>
+                  <button style={btn('gy')} onClick={()=>{setImportFile(null);setImportData([]);setImportPreview([]);setImportMsg('');}}>ยกเลิก</button>
+                </div>
+                {importDone.errors?.length>0&&(
+                  <div style={{marginTop:10,background:T.redLight,borderRadius:T.radius,padding:'10px 14px',fontSize:11}}>
+                    <div style={{fontWeight:600,color:T.red,marginBottom:4}}>❌ รายการที่ import ไม่ได้:</div>
+                    {importDone.errors.slice(0,5).map((e,i)=><div key={i} style={{color:T.red}}>{e}</div>)}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
