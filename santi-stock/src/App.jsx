@@ -1423,13 +1423,24 @@ function SalesPage({stock, setStock, setSales, sales, staff, seeCost, seeProfit}
                     const toInsert=importData.filter(inv=>!existingNums.has(inv.doc_number));
                     skip=importData.length-toInsert.length;
 
-                    // เตรียม rows
+                    // เตรียม rows (clean items ก่อน insert)
+                    const cleanItems=items=>items.map(it=>({
+                      name:String(it.name||'').slice(0,200),
+                      qty:Number(it.qty)||1,
+                      sell:Number(it.sell)||0,
+                      unit_price:Number(it.unit_price||it.sell)||0,
+                      vat_mode:it.vat_mode||'none',
+                      vat_amount:Number(it.vat_amount)||0,
+                      subtotal:Number(it.subtotal)||0,
+                      cost:Number(it.cost)||0,
+                      sku:String(it.sku||'IMPORT').slice(0,50),
+                    }));
                     const rows=toInsert.map(inv=>{
                       const subtotal=inv.subtotal||inv.items.reduce((s,it)=>s+(parseFloat(it.sell)||0)*(parseInt(it.qty)||1),0);
                       const revTotal=inv.total||subtotal; // ก่อน VAT
                       return {
                         doc_number:inv.doc_number, doc_type:'receipt', status:'paid',
-                        customer_name:inv.customer_name||'', items:inv.items,
+                        customer_name:inv.customer_name||'', items:cleanItems(inv.items),
                         subtotal, discount_amount:0, after_discount:subtotal,
                         vat_amount:inv.vat||0, total:revTotal,
                         payment_method:inv.channel||'transfer', payment_note:inv.payment_info||'',
@@ -1439,18 +1450,22 @@ function SalesPage({stock, setStock, setSales, sales, staff, seeCost, seeProfit}
                       };
                     });
 
-                    // Batch insert ทีละ 100 ใบ
-                    const BATCH_SIZE=100;
+                    // Batch insert ทีละ 200 ใบ (เร็วกว่า 100)
+                    const BATCH_SIZE=200;
                     for(let i=0;i<rows.length;i+=BATCH_SIZE){
                       const chunk=rows.slice(i,i+BATCH_SIZE);
-                      setImportMsg(`⏳ กำลัง import... ${Math.min(i+BATCH_SIZE,rows.length)}/${rows.length} ใบ`);
+                      const pct=Math.round((i/rows.length)*100);
+                      setImportMsg(`⏳ กำลัง import... ${Math.min(i+BATCH_SIZE,rows.length)}/${rows.length} ใบ (${pct}%)`);
                       const {error}=await supabase.from('sales_orders').insert(chunk);
                       if(error){
-                        // batch fail → ลอง insert ทีละอัน
-                        for(const row of chunk){
-                          const {error:e2}=await supabase.from('sales_orders').insert([row]);
-                          if(e2) errors.push(row.doc_number+': '+e2.message);
-                          else ok++;
+                        // batch ใหญ่เกิน → แบ่งเป็น 50 แทน
+                        const SMALL=50;
+                        for(let j=0;j<chunk.length;j+=SMALL){
+                          const mini=chunk.slice(j,j+SMALL);
+                          const {error:e2}=await supabase.from('sales_orders').insert(mini);
+                          if(e2){
+                            errors.push(`batch[${i+j}-${i+j+SMALL}]: ${e2.message}`);
+                          } else { ok+=mini.length; }
                         }
                       } else { ok+=chunk.length; }
                     }
