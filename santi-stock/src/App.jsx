@@ -1318,7 +1318,7 @@ function SalesPage({stock, setStock, setSales, sales, staff, seeCost, seeProfit}
                           vat_mode:vatAmt>0?'add':'none',
                           vat_amount:vatAmt,
                           subtotal:beforeVat,
-                          cost:(()=>{const n=productName.toLowerCase();const m=PR.find(p=>p[1].toLowerCase()===n||n.startsWith(p[1].toLowerCase().slice(0,6))||p[1].toLowerCase().startsWith(n.slice(0,6)));return m?parseFloat(m[4]||0)*qty:0;})(),
+                          cost:(()=>{const n=productName.toLowerCase();const m=PR.find(p=>p[1].toLowerCase()===n||n.startsWith(p[1].toLowerCase().slice(0,6))||p[1].toLowerCase().startsWith(n.slice(0,6)));return m?toNum(m[4]||0):0;})(),
                           sku:(()=>{const n=productName.toLowerCase();const m=PR.find(p=>p[1].toLowerCase()===n||n.startsWith(p[1].toLowerCase().slice(0,6))||p[1].toLowerCase().startsWith(n.slice(0,6)));return m?m[0]:'IMPORT-'+productName.slice(0,20).replace(/[^a-zA-Z0-9ก-๙]/g,'_');})(),
                         });
                         invoiceMap[inv].subtotal+=beforeVat;
