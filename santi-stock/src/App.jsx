@@ -3336,11 +3336,117 @@ function SupplyPage({stock,setStock,sales,products,can}){
 // ════════════════════════════════════════════════════════
 // MAIN APP — with Auth
 // ════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════
+// CHANGE PASSWORD MODAL
+// ════════════════════════════════════════════════════════
+function ChangePasswordModal({onClose}){
+  const [oldPwd,   setOldPwd]   = useState('');
+  const [newPwd,   setNewPwd]   = useState('');
+  const [confirm,  setConfirm]  = useState('');
+  const [loading,  setLoading]  = useState(false);
+  const [msg,      setMsg]      = useState('');
+  const [showOld,  setShowOld]  = useState(false);
+  const [showNew,  setShowNew]  = useState(false);
+
+  const handleChange = async () => {
+    if(!oldPwd||!newPwd||!confirm){ setMsg('❌ กรอกข้อมูลให้ครบ'); return; }
+    if(newPwd.length < 6){ setMsg('❌ รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร'); return; }
+    if(newPwd !== confirm){ setMsg('❌ รหัสผ่านใหม่ไม่ตรงกัน'); return; }
+    if(newPwd === oldPwd){ setMsg('❌ รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสเดิม'); return; }
+    setLoading(true); setMsg('');
+    // Re-authenticate first
+    const {data:{session}} = await supabase.auth.getSession();
+    const email = session?.user?.email;
+    const {error:signInErr} = await supabase.auth.signInWithPassword({email, password:oldPwd});
+    if(signInErr){ setMsg('❌ รหัสผ่านเดิมไม่ถูกต้อง'); setLoading(false); return; }
+    // Update password
+    const {error:updateErr} = await supabase.auth.updateUser({password: newPwd});
+    if(updateErr){ setMsg('❌ '+updateErr.message); setLoading(false); return; }
+    setMsg('✅ เปลี่ยนรหัสผ่านสำเร็จ');
+    setLoading(false);
+    setTimeout(()=>onClose(), 1500);
+  };
+
+  const inputStyle = {
+    width:'100%', padding:'10px 12px', border:'1.5px solid #ddd',
+    borderRadius:6, fontSize:14, fontFamily:'inherit', outline:'none',
+  };
+
+  return(
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:2000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+      <div style={{background:'#fff',borderRadius:10,width:'100%',maxWidth:400,boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
+        {/* Header */}
+        <div style={{background:'#C8102E',padding:'16px 20px',borderRadius:'10px 10px 0 0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div style={{color:'#fff',fontWeight:700,fontSize:15,letterSpacing:'0.04em'}}>🔑 เปลี่ยนรหัสผ่าน</div>
+          <button onClick={onClose} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',width:28,height:28,borderRadius:4,cursor:'pointer',fontSize:16,lineHeight:1}}>×</button>
+        </div>
+
+        <div style={{padding:24}}>
+          {msg&&(
+            <div style={{
+              padding:'10px 14px',borderRadius:6,marginBottom:16,fontSize:13,fontWeight:500,
+              background:msg.startsWith('✅')?'#DCFCE7':'#FEE2E2',
+              color:msg.startsWith('✅')?'#15803D':'#C8102E',
+            }}>{msg}</div>
+          )}
+
+          {/* Old password */}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:12,color:'#666',marginBottom:5,fontWeight:500}}>รหัสผ่านเดิม</div>
+            <div style={{position:'relative'}}>
+              <input type={showOld?'text':'password'} style={inputStyle} value={oldPwd}
+                onChange={e=>setOldPwd(e.target.value)} placeholder="รหัสผ่านเดิม" autoComplete="current-password"/>
+              <button onClick={()=>setShowOld(v=>!v)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'#999',fontSize:16}}>
+                {showOld?'🙈':'👁️'}
+              </button>
+            </div>
+          </div>
+
+          {/* New password */}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:12,color:'#666',marginBottom:5,fontWeight:500}}>รหัสผ่านใหม่ <span style={{color:'#999',fontWeight:400}}>(อย่างน้อย 6 ตัวอักษร)</span></div>
+            <div style={{position:'relative'}}>
+              <input type={showNew?'text':'password'} style={inputStyle} value={newPwd}
+                onChange={e=>setNewPwd(e.target.value)} placeholder="รหัสผ่านใหม่" autoComplete="new-password"/>
+              <button onClick={()=>setShowNew(v=>!v)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'#999',fontSize:16}}>
+                {showNew?'🙈':'👁️'}
+              </button>
+            </div>
+          </div>
+
+          {/* Confirm */}
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:12,color:'#666',marginBottom:5,fontWeight:500}}>ยืนยันรหัสผ่านใหม่</div>
+            <input type="password" style={{
+              ...inputStyle,
+              borderColor: confirm&&newPwd&&confirm!==newPwd?'#C8102E':confirm&&newPwd&&confirm===newPwd?'#16A34A':'#ddd'
+            }} value={confirm} onChange={e=>setConfirm(e.target.value)} placeholder="ยืนยันรหัสผ่านใหม่" autoComplete="new-password"/>
+            {confirm&&newPwd&&confirm!==newPwd&&<div style={{fontSize:11,color:'#C8102E',marginTop:3}}>รหัสผ่านไม่ตรงกัน</div>}
+            {confirm&&newPwd&&confirm===newPwd&&<div style={{fontSize:11,color:'#16A34A',marginTop:3}}>✅ รหัสผ่านตรงกัน</div>}
+          </div>
+
+          {/* Buttons */}
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={onClose} style={{flex:1,padding:'10px 0',background:'#E5E7EB',color:'#374151',border:'none',borderRadius:6,cursor:'pointer',fontSize:13,fontFamily:'inherit',fontWeight:500}}>
+              ยกเลิก
+            </button>
+            <button onClick={handleChange} disabled={loading} style={{flex:2,padding:'10px 0',background:loading?'#999':'#C8102E',color:'#fff',border:'none',borderRadius:6,cursor:loading?'not-allowed':'pointer',fontSize:13,fontFamily:'inherit',fontWeight:700}}>
+              {loading?'⏳ กำลังเปลี่ยน...':'เปลี่ยนรหัสผ่าน'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 export default function App(){
   const [user,setUser]       = useState(null);
   const [profile,setProfile] = useState(null);
   const [permissions,setPermissions] = useState({});
   const [authLoading,setAuthLoading] = useState(true);
+  const [showChangePwd,setShowChangePwd] = useState(false);
   const [tab,setTab]         = useState('report');
   const [products,setProducts] = useState([]);
   const [stock,setStock]     = useState({});
@@ -3497,6 +3603,7 @@ export default function App(){
 
   return(
     <div style={{background:T.bg,minHeight:'100vh'}}>
+      {showChangePwd&&<ChangePasswordModal onClose={()=>setShowChangePwd(false)}/>}
       <div style={S.wrap}>
         {/* Header — Santi Panich Brand */}
         <div style={S.hdr}>
@@ -3516,6 +3623,7 @@ export default function App(){
               <div style={{fontSize:11,color:'rgba(255,255,255,0.95)',fontWeight:600}}>{{'admin':'👑 Admin','manager':'📊 Manager','sales':'💰 Sales','warehouse':'📦 Warehouse','production':'🏭 Production','accounting':'🧾 Accounting','viewer':'👁️ Viewer'}[profile.role]||profile.role}</div>
               <div style={{fontSize:10,color:'rgba(255,255,255,0.55)'}}>{profile.full_name||profile.email} · {PR.length} SKU</div>
             </div>
+            <button onClick={()=>setShowChangePwd(true)} style={{padding:'6px 10px',background:'rgba(255,255,255,0.12)',color:'#FFFFFF',border:'1px solid rgba(255,255,255,0.25)',borderRadius:4,cursor:'pointer',fontSize:11,fontFamily:'inherit',marginRight:4}} title="เปลี่ยนรหัสผ่าน">🔑</button>
             <button onClick={logout} style={{padding:'6px 14px',background:'rgba(255,255,255,0.12)',color:'#FFFFFF',border:'1px solid rgba(255,255,255,0.25)',borderRadius:4,cursor:'pointer',fontSize:11,fontWeight:700,letterSpacing:'0.06em',fontFamily:'inherit'}}>LOGOUT</button>
           </div>
         </div>{/* Header */}
