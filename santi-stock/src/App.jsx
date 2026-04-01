@@ -1247,6 +1247,12 @@ function SalesPage({stock, setStock, setSales, sales, staff, seeCost, seeProfit}
                     const XLSX=window.XLSX;
                     if(!XLSX){setImportMsg('❌ ไม่พบ XLSX library');return;}
                     const wb=XLSX.read(ev.target.result,{type:'array',cellDates:true});
+                    // Helper: parse number (รองรับ comma เช่น "2,040" → 2040)
+                    const toNum=v=>{
+                      if(v===null||v===undefined||v==='') return 0;
+                      const s=v.toString().replace(/,/g,'');
+                      return parseFloat(s)||0;
+                    };
                     // Helper: แปลง Date → YYYY-MM-DD
                     const toDateStr=v=>{
                       if(!v) return new Date().toISOString().slice(0,10);
@@ -1298,12 +1304,12 @@ function SalesPage({stock, setStock, setSales, sales, staff, seeCost, seeProfit}
                             items:[],total:0,vat:0,subtotal:0,
                           };
                         }
-                        const qty=parseFloat(r[9])||1;
-                        const unitPrice=parseFloat(r[10])||0;
-                        const discAmt=parseFloat(r[11])||0;
-                        const beforeVat=parseFloat(r[12])||0;
-                        const vatAmt=parseFloat(r[13])||0;
-                        const net=parseFloat(r[14])||0;
+                        const qty=toNum(r[9])||1;
+                        const unitPrice=toNum(r[10]);
+                        const discAmt=toNum(r[11]);
+                        const beforeVat=toNum(r[12]);
+                        const vatAmt=toNum(r[13]);
+                        const net=toNum(r[14]);
                         const productName=r[7]?.toString().trim()||'';
                         invoiceMap[inv].items.push({
                           name:productName,qty,
@@ -1333,9 +1339,9 @@ function SalesPage({stock, setStock, setSales, sales, staff, seeCost, seeProfit}
                             payment_info:r[12]?.toString().trim()||'', items:[],total:0,vat:0,subtotal:0,
                           };
                         }
-                        const price=parseFloat(r[8])||0;
-                        const vatAmt=parseFloat(r[9])||0;
-                        const net=parseFloat(r[7])||0;
+                        const price=toNum(r[8]);
+                        const vatAmt=toNum(r[9]);
+                        const net=toNum(r[7]);
                         const productName=r[6]?.toString().trim()||'';
                         const bPname=productName.toLowerCase();
                         const bMatch=PR.find(p=>
