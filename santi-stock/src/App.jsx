@@ -1242,11 +1242,15 @@ function SalesPage({stock, setStock, setSales, sales, staff, seeCost, seeProfit}
                 const f=e.target.files?.[0]; if(!f) return;
                 setImportFile(f); setImportPreview([]); setImportData([]); setImportMsg('');
                 const reader=new FileReader();
-                reader.onload=ev=>{
+                reader.onload=async ev=>{
                   try{
                     const XLSX=window.XLSX;
                     if(!XLSX){setImportMsg('❌ ไม่พบ XLSX library');return;}
                     const wb=XLSX.read(ev.target.result,{type:'array',cellDates:true});
+                    // โหลด SME product mapping จาก DB
+                    const {data:smeMapRows}=await supabase.from('sme_product_map').select('sme_name,sku');
+                    const smeMapObj={};
+                    (smeMapRows||[]).forEach(r=>{ if(r.sku) smeMapObj[r.sme_name.trim().toLowerCase()]=r.sku; });
                     // Helper: parse number (รองรับ comma เช่น "2,040" → 2040)
                     const toNum=v=>{
                       if(v===null||v===undefined||v==='') return 0;
@@ -1318,8 +1322,20 @@ function SalesPage({stock, setStock, setSales, sales, staff, seeCost, seeProfit}
                           vat_mode:vatAmt>0?'add':'none',
                           vat_amount:vatAmt,
                           subtotal:beforeVat,
-                          cost:(()=>{const n=productName.toLowerCase();const m=PR.find(p=>p[1].toLowerCase()===n||n.startsWith(p[1].toLowerCase().slice(0,6))||p[1].toLowerCase().startsWith(n.slice(0,6)));return m?toNum(m[4]||0):0;})(),
-                          sku:(()=>{const n=productName.toLowerCase();const m=PR.find(p=>p[1].toLowerCase()===n||n.startsWith(p[1].toLowerCase().slice(0,6))||p[1].toLowerCase().startsWith(n.slice(0,6)));return m?m[0]:'IMPORT-'+productName.slice(0,20).replace(/[^a-zA-Z0-9ก-๙]/g,'_');})(),
+                          cost:(()=>{
+                            const n=productName.toLowerCase().trim();
+                            const mapSku=smeMapObj[n];
+                            if(mapSku&&PRMAP[mapSku]) return toNum(PRMAP[mapSku].cost||0);
+                            const m=PR.find(p=>p[1].toLowerCase()===n||n.startsWith(p[1].toLowerCase().slice(0,6))||p[1].toLowerCase().startsWith(n.slice(0,6)));
+                            return m?toNum(m[4]||0):0;
+                          })(),
+                          sku:(()=>{
+                            const n=productName.toLowerCase().trim();
+                            const mapSku=smeMapObj[n];
+                            if(mapSku) return mapSku;
+                            const m=PR.find(p=>p[1].toLowerCase()===n||n.startsWith(p[1].toLowerCase().slice(0,6))||p[1].toLowerCase().startsWith(n.slice(0,6)));
+                            return m?m[0]:'IMPORT-'+productName.slice(0,20).replace(/[^a-zA-Z0-9ก-๙]/g,'_');
+                          })(),
                         });
                         invoiceMap[inv].subtotal+=beforeVat;
                         invoiceMap[inv].vat+=vatAmt;
@@ -3122,6 +3138,137 @@ function POPage({stock, sales, products}){
 }
 
 
+
+// ════════════════════════════════════════════════════════
+// SME PRODUCT MAP — จับคู่ชื่อสินค้า SME Move ↔ SKU
+// ════════════════════════════════════════════════════════
+function SmeMapPage({products}){
+  const [mappings,  setMappings]  = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [saving,    setSaving]    = useState(false);
+  const [msg,       setMsg]       = useState('');
+  const [newSme,    setNewSme]    = useState('');
+  const [newSku,    setNewSku]    = useState('');
+  const [search,    setSearch]    = useState('');
+  const [unmapped,  setUnmapped]  = useState([]);
+
+  useEffect(()=>{ load(); loadUnmapped(); },[]);
+
+  const load = async () => {
+    setLoading(true);
+    const {data} = await supabase.from('sme_product_map').select('*').order('sme_name');
+    setMappings(data||[]);
+    setLoading(false);
+  };
+
+  const loadUnmapped = async () => {
+    const {data} = await supabase.from('sales_orders').select('items').like('doc_number','IN-%').limit(1000);
+    if(!data) return;
+    const noMap={};
+    data.forEach(row=>{
+      (row.items||[]).forEach(it=>{
+        if((it.cost||0)===0 && (it.sku||'').startsWith('IMPORT-'))
+          noMap[it.name]=(noMap[it.name]||0)+1;
+      });
+    });
+    setUnmapped(Object.entries(noMap).sort((a,b)=>b[1]-a[1]));
+  };
+
+  const save = async () => {
+    if(!newSme.trim()||!newSku){setMsg('❌ กรอกทั้งชื่อ SME และ SKU');return;}
+    setSaving(true);
+    const {error}=await supabase.from('sme_product_map').upsert([{sme_name:newSme.trim(),sku:newSku,note:'manual'}],{onConflict:'sme_name'});
+    if(error){setMsg('❌ '+error.message);}
+    else{setMsg('✅ บันทึก: "'+newSme.trim()+'" → '+newSku);setNewSme('');setNewSku('');load();loadUnmapped();}
+    setSaving(false);
+  };
+
+  const del = async id => {
+    await supabase.from('sme_product_map').delete().eq('id',id);
+    load();
+  };
+
+  const filtered=mappings.filter(m=>!search||m.sme_name.toLowerCase().includes(search.toLowerCase())||( m.sku||'').toLowerCase().includes(search.toLowerCase()));
+  const selProd=products.find(p=>p[0]===newSku);
+
+  return(
+    <div>
+      {msg&&<div style={{...S.card,background:msg.startsWith('✅')?T.greenLight:T.redLight,color:msg.startsWith('✅')?T.green:T.red,fontWeight:500,marginBottom:10}}>{msg}</div>}
+
+      {/* สินค้าที่ยังไม่มีต้นทุน */}
+      {unmapped.length>0&&(
+        <div style={S.card}>
+          <div style={S.cardTitle}>⚠️ สินค้าจาก SME ที่ยังไม่มีต้นทุน ({unmapped.length} ชื่อ) — คลิกเพื่อเพิ่ม mapping</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+            {unmapped.slice(0,40).map(([name,cnt])=>(
+              <button key={name} style={{padding:'4px 10px',border:`1px solid ${T.amber}`,borderRadius:T.radius,background:T.amberLight,cursor:'pointer',fontSize:11,color:'#92400e'}} onClick={()=>setNewSme(name)}>
+                {name} <span style={{opacity:0.6}}>×{cnt}</span>
+              </button>
+            ))}
+            {unmapped.length>40&&<span style={{fontSize:11,color:T.textMuted,alignSelf:'center'}}>+{unmapped.length-40} รายการ</span>}
+          </div>
+        </div>
+      )}
+
+      {/* เพิ่ม mapping */}
+      <div style={S.card}>
+        <div style={S.cardTitle}>➕ เพิ่ม / แก้ไข Mapping</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr auto',gap:8,alignItems:'end',marginBottom:8}}>
+          <div>
+            <div style={{fontSize:11,color:T.textMuted,marginBottom:3}}>ชื่อสินค้าใน SME Move (ต้องตรงทุกตัวอักษร)</div>
+            <input style={{...S.inp,width:'100%'}} value={newSme} onChange={e=>setNewSme(e.target.value)} placeholder="เช่น Early Bird 1kg. (Nologo)"/>
+          </div>
+          <div>
+            <div style={{fontSize:11,color:T.textMuted,marginBottom:3}}>SKU ในระบบ (พร้อมต้นทุน)</div>
+            <select style={{...S.inp,width:'100%'}} value={newSku} onChange={e=>setNewSku(e.target.value)}>
+              <option value="">— เลือก SKU —</option>
+              {products.map(p=><option key={p[0]} value={p[0]}>{p[0]} — {p[1]} (ทุน:฿{p[4]})</option>)}
+            </select>
+          </div>
+          <button style={btn('gr',{padding:'8px 20px'})} onClick={save} disabled={saving}>{saving?'⏳':'💾 บันทึก'}</button>
+        </div>
+        {selProd&&(
+          <div style={{fontSize:12,background:T.greenLight,borderRadius:T.radius,padding:'6px 12px',color:T.green}}>
+            ✅ {selProd[1]} | หมวด: {selProd[2]} | ขาย: ฿{selProd[3]} | <b>ต้นทุน: ฿{selProd[4]}</b>
+          </div>
+        )}
+      </div>
+
+      {/* รายการ mapping */}
+      <div style={S.card}>
+        <div style={{...S.cardTitle,justifyContent:'space-between'}}>
+          <span>📋 Mapping ทั้งหมด ({mappings.length} รายการ)</span>
+          <input style={{...S.inp,fontSize:11,padding:'4px 8px',width:180}} placeholder="ค้นหา..." value={search} onChange={e=>setSearch(e.target.value)}/>
+        </div>
+        {loading?<div style={{textAlign:'center',padding:20,color:T.textMuted}}>⏳ โหลด...</div>:(
+          <div style={S.tow}>
+            <table style={S.tbl}>
+              <thead><tr>{['ชื่อใน SME Move','SKU','ชื่อสินค้าในระบบ','ต้นทุน/หน่วย','ลบ'].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead>
+              <tbody>
+                {filtered.map((m,i)=>{
+                  const p=products.find(x=>x[0]===m.sku);
+                  return(<tr key={m.id}>
+                    <td style={{...tdr(i),fontSize:12,fontWeight:500}}>{m.sme_name}</td>
+                    <td style={{...tdr(i),fontSize:11,color:T.blue}}>{m.sku||'-'}</td>
+                    <td style={tdr(i)}>{p?p[1]:<span style={{color:T.red}}>ไม่พบ SKU</span>}</td>
+                    <td style={{...tdr(i),color:T.green,fontWeight:600}}>{p?'฿'+p[4]:'-'}</td>
+                    <td style={tdr(i)}><button style={{background:'none',border:'none',color:T.red,cursor:'pointer',fontSize:18,lineHeight:1}} onClick={()=>del(m.id)}>×</button></td>
+                  </tr>);
+                })}
+                {!filtered.length&&<tr><td colSpan={5} style={{...tdr(0),textAlign:'center',color:T.textMuted,padding:20}}>ไม่มีข้อมูล</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div style={{marginTop:10,fontSize:11,color:T.textMuted}}>
+          💡 หลังเพิ่ม mapping แล้ว ลบข้อมูล import เก่าแล้ว import ใหม่ จะได้ต้นทุนที่ถูกต้อง
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 // ════════════════════════════════════════════════════════
 // SETTINGS PAGE — Permission Matrix + System Settings
 // ════════════════════════════════════════════════════════
@@ -3154,7 +3301,7 @@ const PERM_COLS = [
   {v:'see_profit', l:'เห็นกำไร',  color:'#7C3AED'},
 ];
 
-function SettingsPage({permissions, setPermissions, profile}){
+function SettingsPage({permissions, setPermissions, profile, products=[]}){
   const [selRole, setSelRole] = useState('sales');
   const [matrix,  setMatrix]  = useState({});
   const [loading, setLoading] = useState(true);
@@ -3280,7 +3427,7 @@ function SettingsPage({permissions, setPermissions, profile}){
     <div>
       {/* Sub-tabs */}
       <div style={{...S.nav,marginBottom:14}}>
-        {[['permissions','🔐 จัดการสิทธิ์'],['line','💬 LINE Bot'],['company','🏢 ข้อมูลบริษัท']].map(([v,l])=>(
+        {[['permissions','🔐 จัดการสิทธิ์'],['line','💬 LINE Bot'],['company','🏢 ข้อมูลบริษัท'],['sme_map','🗺️ Mapping SME']].map(([v,l])=>(
           <button key={v} style={nbtn(activeTab===v)} onClick={()=>setActiveTab(v)}>{l}</button>
         ))}
       </div>
@@ -3515,6 +3662,9 @@ function SettingsPage({permissions, setPermissions, profile}){
         </div>
       )}
 
+      {activeTab==='sme_map'&&(
+        <div><SmeMapPage products={products}/></div>
+      )}
       {activeTab==='company'&&(
         <div style={S.card}>
           <div style={S.cardTitle}>🏢 ข้อมูลบริษัท (แสดงในใบเสร็จ/ใบกำกับภาษี)</div>
@@ -3916,7 +4066,7 @@ export default function App(){
         {tab==='selling'  &&<SellingPage   stock={stock} setStock={setStock} setSales={setSales} sales={sales} staff={staff} can={can}/>}
         {tab==='supply'   &&<SupplyPage    stock={stock} setStock={setStock} sales={sales} products={products} can={can}/>}
         {tab==='users'    &&can('users')   &&<UserManagePage profile={profile}/>}
-        {tab==='settings' &&can('settings')&&<SettingsPage permissions={permissions} setPermissions={setPermissions} profile={profile}/>}
+        {tab==='settings' &&can('settings')&&<SettingsPage permissions={permissions} setPermissions={setPermissions} profile={profile} products={products}/>}
       </div>
     </div>
   );
