@@ -1310,12 +1310,14 @@ function SalesPage({stock, setStock, setSales, sales, staff, seeCost, seeProfit}
                           sell:unitPrice,unit_price:unitPrice,
                           discount_pct:unitPrice>0?Math.round(discAmt/(unitPrice*qty)*100*100)/100:0,
                           vat_mode:vatAmt>0?'add':'none',
-                          vat_amount:vatAmt,subtotal:net,cost:0,
-                          sku:'IMPORT-'+productName.slice(0,20).replace(/[^a-zA-Z0-9ก-๙]/g,'_'),
+                          vat_amount:vatAmt,
+                          subtotal:beforeVat,
+                          cost:(()=>{const n=productName.toLowerCase();const m=PR.find(p=>p[1].toLowerCase()===n||n.startsWith(p[1].toLowerCase().slice(0,6))||p[1].toLowerCase().startsWith(n.slice(0,6)));return m?parseFloat(m[4]||0)*qty:0;})(),
+                          sku:(()=>{const n=productName.toLowerCase();const m=PR.find(p=>p[1].toLowerCase()===n||n.startsWith(p[1].toLowerCase().slice(0,6))||p[1].toLowerCase().startsWith(n.slice(0,6)));return m?m[0]:'IMPORT-'+productName.slice(0,20).replace(/[^a-zA-Z0-9ก-๙]/g,'_');})(),
                         });
                         invoiceMap[inv].subtotal+=beforeVat;
                         invoiceMap[inv].vat+=vatAmt;
-                        invoiceMap[inv].total+=net;
+                        invoiceMap[inv].total+=beforeVat;
                       });
                     } else {
                       // Billing: col0=receipt#, col1=status, col2=date, col3=channel, col4=invoice#,
@@ -1335,15 +1337,24 @@ function SalesPage({stock, setStock, setSales, sales, staff, seeCost, seeProfit}
                         const vatAmt=parseFloat(r[9])||0;
                         const net=parseFloat(r[7])||0;
                         const productName=r[6]?.toString().trim()||'';
+                        const bPname=productName.toLowerCase();
+                        const bMatch=PR.find(p=>
+                          p[1].toLowerCase()===bPname ||
+                          bPname.includes(p[1].toLowerCase().slice(0,8)) ||
+                          p[1].toLowerCase().includes(bPname.slice(0,8))
+                        );
+                        const bCost=bMatch?(bMatch[4]||0):0;
                         invoiceMap[inv].items.push({
                           name:productName,qty:1,sell:price,unit_price:price,
                           vat_mode:vatAmt>0?'add':'none',vat_amount:vatAmt,
-                          subtotal:net,cost:0,
-                          sku:'IMPORT-'+productName.slice(0,20).replace(/[^a-zA-Z0-9ก-๙]/g,'_'),
+                          subtotal:price,  // ก่อน VAT
+                          cost:bCost,
+                          sku:bMatch?bMatch[0]:('IMPORT-'+productName.slice(0,20).replace(/[^a-zA-Z0-9ก-๙]/g,'_')),
                         });
                         invoiceMap[inv].subtotal+=price;
                         invoiceMap[inv].vat+=vatAmt;
-                        invoiceMap[inv].total+=net;
+                        invoiceMap[inv].total+=price;  // revenue = ก่อน VAT
+                        invoiceMap[inv].totalCost=(invoiceMap[inv].totalCost||0)+bCost;
                       });
                     }
                     const parsed=Object.values(invoiceMap);
@@ -1379,37 +1390,61 @@ function SalesPage({stock, setStock, setSales, sales, staff, seeCost, seeProfit}
                 </div>
                 <div style={{display:'flex',gap:8,alignItems:'center'}}>
                   <button style={{...btn('gr'),padding:'10px 24px',fontSize:13}} disabled={importing} onClick={async()=>{
-                    setImporting(true); setImportMsg('⏳ กำลัง import...');
+                    setImporting(true); setImportMsg('⏳ กำลังเตรียมข้อมูล...');
                     let ok=0, skip=0; const errors=[];
+
+                    // ดึง doc_numbers ที่มีอยู่แล้ว (1 query)
                     const {data:existing}=await supabase.from('sales_orders').select('doc_number');
                     const existingNums=new Set((existing||[]).map(o=>o.doc_number));
-                    for(const inv of importData){
-                      if(existingNums.has(inv.doc_number)){skip++;continue;}
-                      try{
-                        const subtotal=inv.items.reduce((s,it)=>s+(it.sell*it.qty),0);
-                        const {error}=await supabase.from('sales_orders').insert([{
-                          doc_number:inv.doc_number, doc_type:'receipt', status:'paid',
-                          customer_name:inv.customer_name, items:inv.items,
-                          subtotal, discount_amount:0, after_discount:subtotal,
-                          vat_amount:inv.vat, total:inv.total,
-                          payment_method:inv.channel, payment_note:inv.payment_info,
-                          payment_date:inv.date, staff_name:inv.staff_name, note:inv.note,
-                          created_at:(()=>{ try{ return new Date(inv.date+'T00:00:00+07:00').toISOString(); }catch(e){ return new Date().toISOString(); } })(),
-                        }]);
-                        if(error){errors.push(inv.doc_number+': '+error.message);}
-                        else{
-                          ok++;
-                          setSales(prev=>[{
-                            id:'IMP-'+inv.doc_number, date:new Date(inv.date+'T00:00:00+07:00').toISOString(),
-                            items:inv.items, total:inv.total, discount_amount:0,
-                            total_after_discount:subtotal, vat_amount:inv.vat, total_after_vat:inv.total,
-                            note:inv.note, channel:inv.channel,
-                            customer_name:inv.customer_name, staff_name:inv.staff_name, commission_amount:0,
-                            _source:'import', _doc_number:inv.doc_number,
-                          },...prev]);
+
+                    // กรองเฉพาะที่ยังไม่มี
+                    const toInsert=importData.filter(inv=>!existingNums.has(inv.doc_number));
+                    skip=importData.length-toInsert.length;
+
+                    // เตรียม rows
+                    const rows=toInsert.map(inv=>{
+                      const subtotal=inv.subtotal||inv.items.reduce((s,it)=>s+(parseFloat(it.sell)||0)*(parseInt(it.qty)||1),0);
+                      const revTotal=inv.total||subtotal; // ก่อน VAT
+                      return {
+                        doc_number:inv.doc_number, doc_type:'receipt', status:'paid',
+                        customer_name:inv.customer_name||'', items:inv.items,
+                        subtotal, discount_amount:0, after_discount:subtotal,
+                        vat_amount:inv.vat||0, total:revTotal,
+                        payment_method:inv.channel||'transfer', payment_note:inv.payment_info||'',
+                        payment_date:inv.date||null, staff_name:inv.staff_name||'',
+                        note:inv.note||'', ref_doc:inv.ref_doc||inv.receipt_num||'',
+                        created_at:(()=>{try{return new Date(inv.date+'T00:00:00+07:00').toISOString();}catch(e){return new Date().toISOString();}})(),
+                      };
+                    });
+
+                    // Batch insert ทีละ 100 ใบ
+                    const BATCH_SIZE=100;
+                    for(let i=0;i<rows.length;i+=BATCH_SIZE){
+                      const chunk=rows.slice(i,i+BATCH_SIZE);
+                      setImportMsg(`⏳ กำลัง import... ${Math.min(i+BATCH_SIZE,rows.length)}/${rows.length} ใบ`);
+                      const {error}=await supabase.from('sales_orders').insert(chunk);
+                      if(error){
+                        // batch fail → ลอง insert ทีละอัน
+                        for(const row of chunk){
+                          const {error:e2}=await supabase.from('sales_orders').insert([row]);
+                          if(e2) errors.push(row.doc_number+': '+e2.message);
+                          else ok++;
                         }
-                      } catch(e){errors.push(inv.doc_number+': '+e.message);}
+                      } else { ok+=chunk.length; }
                     }
+
+                    // Sync sales state
+                    if(ok>0){
+                      setSales(prev=>[...rows.slice(0,ok).map(row=>({
+                        id:'IMP-'+row.doc_number, date:row.created_at,
+                        items:row.items, total:row.total, discount_amount:0,
+                        total_after_discount:row.subtotal, vat_amount:row.vat_amount||0,
+                        total_after_vat:row.total, note:row.note, channel:row.payment_method,
+                        customer_name:row.customer_name, staff_name:row.staff_name, commission_amount:0,
+                        _source:'import', _doc_number:row.doc_number,
+                      })),...prev]);
+                    }
+
                     setImporting(false);
                     let m=`✅ Import สำเร็จ ${ok} ใบ`;
                     if(skip) m+=` | ข้าม ${skip} ใบ (ซ้ำ)`;
@@ -1635,7 +1670,7 @@ function ReportPage({stock,sales,permissions={}}){
       {name:'สินค้าขายดี',headers:['#','SKU','ชื่อ','หมวด','ชิ้น','ยอดขาย','กำไร'],
        data:topItems.map((r,i)=>[i+1,r.sku,r.name,r.cat,r.qty,Math.round(r.rev),Math.round(r.profit)])},
       {name:'ประวัติบิล',headers:['วันที่','ลูกค้า','ช่องทาง','ยอดรวม','ส่วนลด','VAT','ยอดสุทธิ','ต้นทุน','กำไร','หมายเหตุ'],
-       data:filtered.slice().reverse().map(s=>{const c=s.items.reduce((a,b)=>a+(b.cost||0)*b.qty,0);return[thDT(s.date),s.customer_name||'-',s.channel||'-',Math.round(s.total||0),Math.round(s.discount_amount||0),Math.round(s.vat_amount||0),Math.round(s.total_after_vat||s.total||0),Math.round(c),Math.round((s.total_after_vat||s.total||0)-c),s.note||''];})},
+       data:filtered.slice().reverse().map(s=>{const c=s.items.reduce((a,b)=>a+(b.cost||0)*b.qty,0);return[thDT(s.date),s.customer_name||'-',s.channel||'-',Math.round(s.total||0),Math.round(s.discount_amount||0),Math.round(s.vat_amount||0),Math.round(s.after_discount||s.total_after_discount||s.total||0),Math.round(c),Math.round((s.after_discount||s.total_after_discount||s.total||0)-c),s.note||''];})},
     ]);
   };
 
@@ -1842,7 +1877,7 @@ function ReportPage({stock,sales,permissions={}}){
           if(!s.staff_name) return;
           if(!commMap[s.staff_name]) commMap[s.staff_name]={name:s.staff_name,orders:0,revenue:0,commission:0};
           commMap[s.staff_name].orders++;
-          commMap[s.staff_name].revenue+=s.total_after_vat||s.total||0;
+          commMap[s.staff_name].revenue+=s.after_discount||s.total_after_discount||s.total||0;
           commMap[s.staff_name].commission+=s.commission_amount||0;
         });
         const commRows=Object.values(commMap).sort((a,b)=>b.commission-a.commission);
@@ -1887,7 +1922,7 @@ function ReportPage({stock,sales,permissions={}}){
             ?<tr><td colSpan={7} style={{...tdr(0),textAlign:'center',color:T.textMuted,padding:24}}>ไม่มีบิลในช่วงเวลานี้</td></tr>
             :filtered.slice(0,50).map((s,i)=>{
               const c=s.items.reduce((a,b)=>a+(b.cost||0)*b.qty,0);
-              const net=s.total_after_vat||s.total||0;
+              const net=s.after_discount||s.total_after_discount||s.total||0;
               return(
                 <tr key={s.id||i}>
                   <td style={{...tdr(i),whiteSpace:'nowrap'}}>{thDT(s.date)}</td>
