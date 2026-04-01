@@ -1231,8 +1231,9 @@ function SalesPage({stock, setStock, setSales, sales, staff, seeCost, seeProfit}
           <div style={S.card}>
             <div style={S.cardTitle}>📥 Import ยอดขายจาก SME Move</div>
             <div style={{fontSize:12,color:T.textMuted,lineHeight:1.8,marginBottom:14}}>
-              ✅ รองรับไฟล์ Excel (.xlsx) ที่ export จาก SME Move หน้า Billing<br/>
-              ✅ import เฉพาะสถานะ <b>"ได้รับเงินแล้ว"</b> เท่านั้น<br/>
+              ✅ รองรับไฟล์ Excel จาก SME Move: <b>Billing</b> หรือ <b>Invoice</b> (แนะนำ)<br/>
+              ✅ ไฟล์ Invoice: import สินค้าครบทุกรายการต่อใบ + มีจำนวน/ราคาต่อหน่วย<br/>
+              ✅ ไฟล์ Billing: import เฉพาะสถานะ "ได้รับเงินแล้ว"<br/>
               ✅ Group สินค้าหลายรายการในใบเดียวกันอัตโนมัติ<br/>
               ⚠️ เลขที่ใบซ้ำกับที่มีอยู่แล้วจะข้ามไป
             </div>
@@ -1246,36 +1247,109 @@ function SalesPage({stock, setStock, setSales, sales, staff, seeCost, seeProfit}
                     const XLSX=window.XLSX;
                     if(!XLSX){setImportMsg('❌ ไม่พบ XLSX library');return;}
                     const wb=XLSX.read(ev.target.result,{type:'array',cellDates:true});
-                    const ws=wb.Sheets[wb.SheetNames[0]];
-                    const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,dateNF:'yyyy-mm-dd'});
-                    if(!rows.length){setImportMsg('❌ ไฟล์ว่างเปล่า');return;}
-                    const dataRows=rows.slice(1).filter(r=>r[1]==='ได้รับเงินแล้ว'&&r[4]);
-                    const invoiceMap={};
-                    dataRows.forEach(r=>{
-                      const inv=r[4]?.toString().trim(); if(!inv) return;
-                      if(!invoiceMap[inv]){
-                        const dateStr=r[2]?.toString().slice(0,10)||new Date().toISOString().slice(0,10);
-                        invoiceMap[inv]={
-                          doc_number:inv, receipt_num:r[0]?.toString().trim()||'',
-                          date:dateStr, channel:r[3]==='โอนเงิน'?'transfer':'In-store',
-                          customer_name:r[5]?.toString().trim()||'',
-                          note:r[10]?.toString().trim()||'',
-                          staff_name:r[15]?.toString().trim()||'',
-                          payment_info:r[12]?.toString().trim()||'',
-                          items:[], total:0, vat:0,
-                        };
+                    // Helper: แปลง Date → YYYY-MM-DD
+                    const toDateStr=v=>{
+                      if(!v) return new Date().toISOString().slice(0,10);
+                      if(v instanceof Date) return v.toISOString().slice(0,10);
+                      const s=v.toString().trim();
+                      if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)){
+                        const [d,m,y]=s.split('/'); return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
                       }
-                      const price=parseFloat(r[8])||0;
-                      const vatAmt=parseFloat(r[9])||0;
-                      const total=parseFloat(r[7])||0;
-                      const productName=r[6]?.toString().trim()||'';
-                      invoiceMap[inv].items.push({name:productName,qty:1,sell:price,unit_price:price,vat_amount:vatAmt,subtotal:total,cost:0,sku:'IMPORT-'+productName.slice(0,20).replace(/\s/g,'_')});
-                      invoiceMap[inv].total+=total;
-                      invoiceMap[inv].vat+=vatAmt;
-                    });
+                      if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+                      return new Date().toISOString().slice(0,10);
+                    };
+
+                    // Auto-detect ว่าเป็นไฟล์ไหน
+                    // Invoice by items: มี col จำนวน (qty) และ ราคาต่อหน่วย
+                    // Billing: มี col สถานะ = "ได้รับเงินแล้ว"
+                    const sheetNames=wb.SheetNames;
+                    const hasItemsSheet=sheetNames.includes('Invoice by items');
+                    const wsTarget=hasItemsSheet ? wb.Sheets['Invoice by items'] : wb.Sheets[sheetNames[0]];
+                    const allRows=window.XLSX.utils.sheet_to_json(wsTarget,{header:1,raw:false,dateNF:'yyyy-mm-dd'});
+                    if(!allRows.length){setImportMsg('❌ ไม่พบข้อมูลในไฟล์');return;}
+
+                    let dataRows, fileType;
+                    if(hasItemsSheet){
+                      // Invoice by items: col4=ใบเสร็จ (paid ถ้ามี), filter paid only
+                      fileType='invoice';
+                      dataRows=allRows.slice(1).filter(r=>r[3]&&r[0]); // มีใบเสร็จ = ชำระแล้ว
+                    } else {
+                      // Billing: col1=สถานะ
+                      fileType='billing';
+                      dataRows=allRows.slice(1).filter(r=>r[1]==='ได้รับเงินแล้ว'&&r[4]);
+                    }
+
+                    const invoiceMap={};
+                    if(fileType==='invoice'){
+                      // Invoice by items: col0=invoice#, col2=date, col3=receipt#, col4=customer,
+                      // col6=staff, col7=product, col9=qty, col10=unitPrice, col11=discount, col12=beforeVAT, col13=VAT, col14=net
+                      dataRows.forEach(r=>{
+                        const inv=r[0]?.toString().trim(); if(!inv) return;
+                        if(!invoiceMap[inv]){
+                          invoiceMap[inv]={
+                            doc_number:inv,
+                            receipt_num:r[3]?.toString().trim()||'',
+                            date:toDateStr(r[2]),
+                            channel:'transfer',
+                            customer_name:r[4]?.toString().trim()||'',
+                            ref_doc:r[5]?.toString().trim()||'',
+                            staff_name:r[6]?.toString().trim()||'',
+                            note:'',
+                            items:[],total:0,vat:0,subtotal:0,
+                          };
+                        }
+                        const qty=parseFloat(r[9])||1;
+                        const unitPrice=parseFloat(r[10])||0;
+                        const discAmt=parseFloat(r[11])||0;
+                        const beforeVat=parseFloat(r[12])||0;
+                        const vatAmt=parseFloat(r[13])||0;
+                        const net=parseFloat(r[14])||0;
+                        const productName=r[7]?.toString().trim()||'';
+                        invoiceMap[inv].items.push({
+                          name:productName,qty,
+                          sell:unitPrice,unit_price:unitPrice,
+                          discount_pct:unitPrice>0?Math.round(discAmt/(unitPrice*qty)*100*100)/100:0,
+                          vat_mode:vatAmt>0?'add':'none',
+                          vat_amount:vatAmt,subtotal:net,cost:0,
+                          sku:'IMPORT-'+productName.slice(0,20).replace(/[^a-zA-Z0-9ก-๙]/g,'_'),
+                        });
+                        invoiceMap[inv].subtotal+=beforeVat;
+                        invoiceMap[inv].vat+=vatAmt;
+                        invoiceMap[inv].total+=net;
+                      });
+                    } else {
+                      // Billing: col0=receipt#, col1=status, col2=date, col3=channel, col4=invoice#,
+                      // col5=customer, col6=product, col7=net, col8=beforeVAT, col9=VAT, col10=note, col15=staff
+                      dataRows.forEach(r=>{
+                        const inv=r[4]?.toString().trim(); if(!inv) return;
+                        if(!invoiceMap[inv]){
+                          invoiceMap[inv]={
+                            doc_number:inv, receipt_num:r[0]?.toString().trim()||'',
+                            date:toDateStr(r[2]), channel:r[3]==='โอนเงิน'?'transfer':'In-store',
+                            customer_name:r[5]?.toString().trim()||'',
+                            note:r[10]?.toString().trim()||'', staff_name:r[15]?.toString().trim()||'',
+                            payment_info:r[12]?.toString().trim()||'', items:[],total:0,vat:0,subtotal:0,
+                          };
+                        }
+                        const price=parseFloat(r[8])||0;
+                        const vatAmt=parseFloat(r[9])||0;
+                        const net=parseFloat(r[7])||0;
+                        const productName=r[6]?.toString().trim()||'';
+                        invoiceMap[inv].items.push({
+                          name:productName,qty:1,sell:price,unit_price:price,
+                          vat_mode:vatAmt>0?'add':'none',vat_amount:vatAmt,
+                          subtotal:net,cost:0,
+                          sku:'IMPORT-'+productName.slice(0,20).replace(/[^a-zA-Z0-9ก-๙]/g,'_'),
+                        });
+                        invoiceMap[inv].subtotal+=price;
+                        invoiceMap[inv].vat+=vatAmt;
+                        invoiceMap[inv].total+=net;
+                      });
+                    }
                     const parsed=Object.values(invoiceMap);
                     setImportData(parsed); setImportPreview(parsed.slice(0,10));
-                    setImportMsg(`✅ พบ ${parsed.length} ใบ จาก ${dataRows.length} แถว พร้อม import`);
+                    const fTypeLabel=fileType==='invoice'?'Invoice by items':'Billing';
+                    setImportMsg(`✅ ตรวจพบไฟล์ ${fTypeLabel} — พบ ${parsed.length} ใบ จาก ${dataRows.length} แถว พร้อม import`);
                   } catch(err){ setImportMsg('❌ อ่านไฟล์ไม่ได้: '+err.message); }
                 };
                 reader.readAsArrayBuffer(f);
@@ -1320,7 +1394,7 @@ function SalesPage({stock, setStock, setSales, sales, staff, seeCost, seeProfit}
                           vat_amount:inv.vat, total:inv.total,
                           payment_method:inv.channel, payment_note:inv.payment_info,
                           payment_date:inv.date, staff_name:inv.staff_name, note:inv.note,
-                          created_at:new Date(inv.date+'T00:00:00+07:00').toISOString(),
+                          created_at:(()=>{ try{ return new Date(inv.date+'T00:00:00+07:00').toISOString(); }catch(e){ return new Date().toISOString(); } })(),
                         }]);
                         if(error){errors.push(inv.doc_number+': '+error.message);}
                         else{
@@ -1348,8 +1422,8 @@ function SalesPage({stock, setStock, setSales, sales, staff, seeCost, seeProfit}
                 </div>
                 {importDone.errors?.length>0&&(
                   <div style={{marginTop:10,background:T.redLight,borderRadius:T.radius,padding:'10px 14px',fontSize:11}}>
-                    <div style={{fontWeight:600,color:T.red,marginBottom:4}}>❌ รายการที่ import ไม่ได้:</div>
-                    {importDone.errors.slice(0,5).map((e,i)=><div key={i} style={{color:T.red}}>{e}</div>)}
+                    <div style={{fontWeight:600,color:T.red,marginBottom:4}}>❌ ตัวอย่าง error (แสดง 5 แรก จาก {importDone.errors.length}):</div>
+                    {importDone.errors.slice(0,5).map((e,i)=><div key={i} style={{color:T.red,wordBreak:'break-all',marginBottom:2}}>{e}</div>)}
                   </div>
                 )}
               </div>
