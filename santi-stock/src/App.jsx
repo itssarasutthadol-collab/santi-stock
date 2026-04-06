@@ -1720,7 +1720,89 @@ function ReportPage({stock,sales,permissions={}}){
     PR.forEach(p=>{const d=stock[p[0]]||{qty:0,cost:p[4]};if(!map[p[2]])map[p[2]]={cat:p[2],val:0,out:0,low:0};map[p[2]].val+=d.qty*d.cost;const t=statType(d.qty,d.safety||10);if(t==='out')map[p[2]].out++;else if(t==='low')map[p[2]].low++;});
     return Object.values(map).sort((a,b)=>b.val-a.val);
   },[stock]);
-  const daily7=useMemo(()=>{const days=[];for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);const ds=d.toDateString();const dayS=sales.filter(s=>new Date(s.date).toDateString()===ds);days.push({label:d.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit'}),rev:dayS.reduce((s,t)=>s+(t.total_after_vat||t.total||0),0)});}return days;},[sales]);
+  // ── Dynamic chart: เปลี่ยนตาม period ที่เลือก ────────────────────
+  const {chartData, chartTitle} = useMemo(()=>{
+    const fmtDay  = d=>d.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit'});
+    const fmtMon  = d=>d.toLocaleDateString('th-TH',{month:'short'});
+    const revOf   = list=>list.reduce((s,t)=>s+(t.total_after_vat||t.total||0),0);
+
+    // ── ปีนี้ / ปีที่แล้ว / เลือกปี → รายเดือน 12 bars ──
+    if(['this_year','last_year','year_pick'].includes(period)){
+      const yr = period==='last_year' ? new Date().getFullYear()-1
+               : period==='year_pick' ? parseInt(quickYear)
+               : new Date().getFullYear();
+      const months=[];
+      for(let m=0;m<12;m++){
+        const start=new Date(yr,m,1), end=new Date(yr,m+1,0,23,59,59);
+        months.push({
+          label: new Date(yr,m,1).toLocaleDateString('th-TH',{month:'short'}),
+          rev: revOf(sales.filter(s=>{const d=new Date(s.date);return d>=start&&d<=end;}))
+        });
+      }
+      return {chartData:months, chartTitle:`📊 ยอดขายรายเดือน ${yr+543}`};
+    }
+
+    // ── เดือนนี้ / เดือนที่แล้ว / เลือกเดือน → รายวันทุกวันในเดือน ──
+    if(['this_month','last_month','month_pick'].includes(period)){
+      const now2=new Date();
+      let yr,mo;
+      if(period==='month_pick'){[yr,mo]=[parseInt(quickMonth.split('-')[0]),parseInt(quickMonth.split('-')[1])-1];}
+      else if(period==='last_month'){yr=now2.getMonth()===0?now2.getFullYear()-1:now2.getFullYear();mo=now2.getMonth()===0?11:now2.getMonth()-1;}
+      else{yr=now2.getFullYear();mo=now2.getMonth();}
+      const daysInMonth=new Date(yr,mo+1,0).getDate();
+      const days=[];
+      for(let d=1;d<=daysInMonth;d++){
+        const start=new Date(yr,mo,d), end=new Date(yr,mo,d,23,59,59);
+        days.push({
+          label: d%5===1||d===daysInMonth?String(d):'',
+          rev: revOf(sales.filter(s=>{const dt=new Date(s.date);return dt>=start&&dt<=end;}))
+        });
+      }
+      const monthName=new Date(yr,mo,1).toLocaleDateString('th-TH',{month:'long',year:'numeric'});
+      return {chartData:days, chartTitle:`📊 ยอดขายรายวัน ${monthName}`};
+    }
+
+    // ── Custom range → รายวัน หรือรายเดือน ตามความยาว ──
+    if(period==='custom'&&customStart&&customEnd){
+      const cs=new Date(customStart), ce=new Date(customEnd);
+      const diffDays=Math.ceil((ce-cs)/86400000)+1;
+      if(diffDays<=62){
+        const days=[];
+        for(let i=0;i<diffDays;i++){
+          const d=new Date(cs);d.setDate(d.getDate()+i);
+          const ds=d.toDateString();
+          days.push({
+            label: i%Math.ceil(diffDays/8)===0?fmtDay(d):'',
+            rev: revOf(sales.filter(s=>new Date(s.date).toDateString()===ds))
+          });
+        }
+        return {chartData:days, chartTitle:`📊 ยอดขายรายวัน ${fmtDay(cs)}–${fmtDay(ce)}`};
+      } else {
+        // รายเดือน
+        const months=[], cur=new Date(cs.getFullYear(),cs.getMonth(),1);
+        const endMon=new Date(ce.getFullYear(),ce.getMonth(),1);
+        while(cur<=endMon){
+          const yr2=cur.getFullYear(),mo2=cur.getMonth();
+          const start=new Date(yr2,mo2,1),end=new Date(yr2,mo2+1,0,23,59,59);
+          months.push({label:fmtMon(cur),rev:revOf(sales.filter(s=>{const d=new Date(s.date);return d>=start&&d<=end;}))});
+          cur.setMonth(cur.getMonth()+1);
+        }
+        return {chartData:months, chartTitle:`📊 ยอดขายรายเดือน (ช่วงที่เลือก)`};
+      }
+    }
+
+    // ── default: 7 วันล่าสุด (today/this_week/yesterday/last_week) ──
+    let days7=7;
+    if(period==='today'||period==='yesterday') days7=14;
+    if(period==='last_week') days7=14;
+    const days=[];
+    for(let i=days7-1;i>=0;i--){
+      const d=new Date();d.setDate(d.getDate()-i);
+      const ds=d.toDateString();
+      days.push({label:fmtDay(d),rev:revOf(sales.filter(s=>new Date(s.date).toDateString()===ds))});
+    }
+    return {chartData:days, chartTitle:`📊 ยอดขาย ${days7} วันล่าสุด`};
+  },[sales,period,quickMonth,quickYear,customStart,customEnd]);
 
   return(
     <div>
@@ -1734,7 +1816,7 @@ function ReportPage({stock,sales,permissions={}}){
         <KPI label="ใกล้หมด"         value={lowN+' รายการ'}  icon="⚠️" bg={T.amberLight} color={T.amber}/>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
-        <div style={S.card}><div style={S.cardTitle}>📊 ยอดขาย 7 วันล่าสุด</div><BarChart data={daily7} vk="rev" lk="label" color={T.dark} h={130}/></div>
+        <div style={S.card}><div style={S.cardTitle}>{chartTitle}</div><BarChart data={chartData} vk="rev" lk="label" color={T.dark} h={130}/></div>
         <div style={S.card}><div style={S.cardTitle}>📦 สต็อกแยกหมวด</div>
           <div style={S.tow}><table style={S.tbl}>
             <thead><tr>{['หมวด','มูลค่า','หมด','ใกล้หมด'].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead>
@@ -2502,9 +2584,6 @@ function UserManagePage({profile}){
   const [invRole,setInvRole]       = useState('sales');
   const [invPass,setInvPass]       = useState('');
   const [saving,setSaving] = useState(false);
-  const [resetTarget, setResetTarget] = useState(null);
-  const [resetPwd,    setResetPwd]    = useState('');
-  const [resetSaving, setResetSaving] = useState(false);
 
   // Staff commission form
   const [showStaff,setShowStaff]   = useState(false);
@@ -2548,18 +2627,6 @@ function UserManagePage({profile}){
     // Reload
     const {data:u} = await supabase.from('profiles').select('*').order('created_at');
     setUsers(u||[]);
-  };
-
-  const resetPassword = async () => {
-    if(!resetPwd || resetPwd.length < 6) { setMsg('❌ รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร'); return; }
-    setResetSaving(true);
-    const { error } = await supabase.rpc('admin_reset_user_password', {
-      target_user_id: resetTarget.id,
-      new_password: resetPwd,
-    });
-    if(error) { setMsg('❌ ' + error.message); setResetSaving(false); return; }
-    setMsg('✅ รีเซ็ตรหัสผ่านของ ' + (resetTarget.full_name||resetTarget.email) + ' เรียบร้อย');
-    setResetTarget(null); setResetPwd(''); setResetSaving(false);
   };
 
   const saveStaff = async () => {
@@ -2651,14 +2718,9 @@ function UserManagePage({profile}){
                   </td>
                   <td style={tdr(i)}>
                     {u.id!==profile.id&&(
-                      <div style={{display:'flex',gap:4}}>
-                        <button style={btn(u.active?'rd':'gr',{padding:'3px 10px',fontSize:11})} onClick={()=>toggleActive(u.id,u.active)}>
-                          {u.active?'ระงับ':'เปิดใช้'}
-                        </button>
-                        <button style={btn('am',{padding:'3px 10px',fontSize:11})} onClick={()=>{setResetTarget(u);setResetPwd('');}} title="รีเซ็ตรหัสผ่าน">
-                          🔑
-                        </button>
-                      </div>
+                      <button style={btn(u.active?'rd':'gr',{padding:'3px 10px',fontSize:11})} onClick={()=>toggleActive(u.id,u.active)}>
+                        {u.active?'ระงับ':'เปิดใช้'}
+                      </button>
                     )}
                   </td>
                 </tr>
@@ -2667,32 +2729,6 @@ function UserManagePage({profile}){
           </table>
         </div>
       </div>
-
-      {resetTarget&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:2000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-          <div style={{background:'#fff',borderRadius:10,width:'100%',maxWidth:380,boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
-            <div style={{background:'#C8102E',padding:'14px 20px',borderRadius:'10px 10px 0 0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <div style={{color:'#fff',fontWeight:700,fontSize:14}}>🔑 รีเซ็ตรหัสผ่าน</div>
-              <button onClick={()=>setResetTarget(null)} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',width:26,height:26,borderRadius:4,cursor:'pointer',fontSize:16,lineHeight:1}}>×</button>
-            </div>
-            <div style={{padding:20}}>
-              <div style={{fontSize:13,marginBottom:14,color:'#555'}}>
-                ตั้งรหัสผ่านใหม่ให้ <b style={{color:'#1A1A1A'}}>{resetTarget.full_name||resetTarget.email}</b>
-              </div>
-              <div style={{fontSize:12,color:'#666',marginBottom:5}}>รหัสผ่านใหม่ (อย่างน้อย 6 ตัวอักษร)</div>
-              <input type="password"
-                style={{width:'100%',padding:'10px 12px',border:'1.5px solid #ddd',borderRadius:6,fontSize:14,fontFamily:'inherit',marginBottom:16,boxSizing:'border-box',outline:'none'}}
-                placeholder="รหัสผ่านใหม่" value={resetPwd} onChange={e=>setResetPwd(e.target.value)} autoFocus/>
-              <div style={{display:'flex',gap:8}}>
-                <button onClick={()=>setResetTarget(null)} style={{flex:1,padding:'10px 0',background:'#E5E7EB',color:'#374151',border:'none',borderRadius:6,cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>ยกเลิก</button>
-                <button onClick={resetPassword} disabled={resetSaving} style={{flex:2,padding:'10px 0',background:resetSaving?'#999':'#C8102E',color:'#fff',border:'none',borderRadius:6,cursor:resetSaving?'not-allowed':'pointer',fontSize:13,fontFamily:'inherit',fontWeight:700}}>
-                  {resetSaving?'⏳ กำลังรีเซ็ต...':'💾 บันทึกรหัสผ่านใหม่'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Staff & Commission */}
       <div style={S.card}>
