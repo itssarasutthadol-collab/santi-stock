@@ -2323,6 +2323,73 @@ function ProductPage({products, setProducts, stock, setStock}){
 }
 
 
+
+// ════════════════════════════════════════════════════════
+// RESET PASSWORD PAGE — หน้าตั้งรหัสผ่านใหม่ (จาก email link)
+// ════════════════════════════════════════════════════════
+function ResetPasswordPage({onDone}){
+  const [newPwd,    setNewPwd]    = useState('');
+  const [confirm,   setConfirm]   = useState('');
+  const [loading,   setLoading]   = useState(false);
+  const [msg,       setMsg]       = useState('');
+  const [showPwd,   setShowPwd]   = useState(false);
+
+  const doReset = async () => {
+    if(!newPwd||!confirm){setMsg('❌ กรอกรหัสผ่านให้ครบ');return;}
+    if(newPwd.length<6){setMsg('❌ รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');return;}
+    if(newPwd!==confirm){setMsg('❌ รหัสผ่านไม่ตรงกัน');return;}
+    setLoading(true); setMsg('');
+    const {error} = await supabase.auth.updateUser({password:newPwd});
+    if(error){setMsg('❌ '+error.message);setLoading(false);return;}
+    setMsg('✅ เปลี่ยนรหัสผ่านสำเร็จแล้ว กำลังพากลับ...');
+    setLoading(false);
+    setTimeout(()=>{ supabase.auth.signOut(); onDone(); }, 2000);
+  };
+
+  return(
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#C8102E',position:'relative',overflow:'hidden'}}>
+      <div style={{position:'absolute',inset:0,opacity:0.08,backgroundImage:'repeating-linear-gradient(45deg,#fff 0,#fff 1px,transparent 0,transparent 50%)',backgroundSize:'20px 20px'}}/>
+      <div style={{background:'#fff',borderRadius:8,padding:'44px 40px',width:380,boxShadow:'0 32px 80px rgba(0,0,0,0.35)',position:'relative',zIndex:1}}>
+        <div style={{textAlign:'center',marginBottom:28}}>
+          <div style={{fontSize:36,marginBottom:8}}>🔑</div>
+          <div style={{fontWeight:800,fontSize:18,color:'#1A1A1A',letterSpacing:'0.04em'}}>ตั้งรหัสผ่านใหม่</div>
+          <div style={{fontSize:12,color:'#888',marginTop:4}}>SANTI PANICH · STOCK SYSTEM</div>
+        </div>
+
+        {msg&&(
+          <div style={{padding:'10px 14px',borderRadius:6,marginBottom:16,fontSize:13,fontWeight:500,background:msg.startsWith('✅')?'#DCFCE7':'#FEE2E2',color:msg.startsWith('✅')?'#15803D':'#C8102E'}}>
+            {msg}
+          </div>
+        )}
+
+        {!msg.startsWith('✅')&&(
+          <>
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:12,color:'#666',marginBottom:5,fontWeight:500}}>รหัสผ่านใหม่ <span style={{color:'#999',fontWeight:400}}>(อย่างน้อย 6 ตัว)</span></div>
+              <div style={{position:'relative'}}>
+                <input type={showPwd?'text':'password'} style={{width:'100%',padding:'10px 40px 10px 12px',border:'1.5px solid #ddd',borderRadius:6,fontSize:14,fontFamily:'inherit',boxSizing:'border-box'}}
+                  value={newPwd} onChange={e=>setNewPwd(e.target.value)} placeholder="รหัสผ่านใหม่" autoComplete="new-password"/>
+                <button onClick={()=>setShowPwd(v=>!v)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'#999',fontSize:16}}>{showPwd?'🙈':'👁️'}</button>
+              </div>
+            </div>
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:12,color:'#666',marginBottom:5,fontWeight:500}}>ยืนยันรหัสผ่านใหม่</div>
+              <input type="password" style={{width:'100%',padding:'10px 12px',border:`1.5px solid ${confirm&&newPwd&&confirm!==newPwd?'#C8102E':confirm&&newPwd&&confirm===newPwd?'#16A34A':'#ddd'}`,borderRadius:6,fontSize:14,fontFamily:'inherit',boxSizing:'border-box'}}
+                value={confirm} onChange={e=>setConfirm(e.target.value)} placeholder="ยืนยันรหัสผ่าน" autoComplete="new-password"/>
+              {confirm&&newPwd&&confirm!==newPwd&&<div style={{fontSize:11,color:'#C8102E',marginTop:3}}>รหัสผ่านไม่ตรงกัน</div>}
+              {confirm&&newPwd&&confirm===newPwd&&<div style={{fontSize:11,color:'#16A34A',marginTop:3}}>✅ รหัสผ่านตรงกัน</div>}
+            </div>
+            <button onClick={doReset} disabled={loading} style={{width:'100%',padding:'13px 0',background:loading?'#999':'#C8102E',color:'#fff',border:'none',borderRadius:5,fontSize:13,fontWeight:700,cursor:loading?'not-allowed':'pointer',fontFamily:'inherit'}}>
+              {loading?'⏳ กำลังบันทึก...':'บันทึกรหัสผ่านใหม่'}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 // ════════════════════════════════════════════════════════
 // LOGIN PAGE
 // ════════════════════════════════════════════════════════
@@ -2331,6 +2398,20 @@ function LoginPage({onLogin}){
   const [pass,setPass]     = useState('');
   const [loading,setLoading]= useState(false);
   const [error,setError]   = useState('');
+  const [forgotMode,setForgotMode] = useState(false);
+  const [forgotMsg,setForgotMsg]   = useState('');
+  const [forgotLoading,setForgotLoading] = useState(false);
+
+  const doForgot = async () => {
+    if(!email.trim()){setForgotMsg('❌ กรอกอีเมลก่อน');return;}
+    setForgotLoading(true); setForgotMsg('');
+    const {error:err} = await supabase.auth.resetPasswordForEmail(email.trim(),{
+      redirectTo: window.location.origin+'/?reset=1',
+    });
+    if(err){setForgotMsg('❌ '+err.message);}
+    else{setForgotMsg('✅ ส่ง email รีเซ็ตรหัสผ่านแล้ว กรุณาตรวจสอบ inbox ของ '+email);}
+    setForgotLoading(false);
+  };
 
   const doLogin = async e => {
     e.preventDefault();
@@ -2377,7 +2458,31 @@ function LoginPage({onLogin}){
           <button type="submit" disabled={loading} style={{width:'100%',padding:'13px 0',background:'#C8102E',color:'#FFFFFF',border:'none',borderRadius:5,fontSize:13,fontWeight:700,cursor:'pointer',letterSpacing:'0.08em',fontFamily:'inherit',transition:'background 0.2s'}}>
             {loading?'กำลังเข้าสู่ระบบ...':'SIGN IN'}
           </button>
+          <button type="button" onClick={()=>{setForgotMode(true);setError('');setForgotMsg('');}} style={{width:'100%',marginTop:10,padding:'8px 0',background:'transparent',color:'#999',border:'none',cursor:'pointer',fontSize:12,fontFamily:'inherit',textDecoration:'underline'}}>
+            ลืมรหัสผ่าน?
+          </button>
         </form>
+        {forgotMode&&(
+          <div style={{marginTop:16,padding:'16px',background:'#f9f9f9',borderRadius:8,border:'1px solid #eee'}}>
+            <div style={{fontWeight:600,fontSize:13,marginBottom:10,color:'#1A1A1A'}}>🔑 รีเซ็ตรหัสผ่าน</div>
+            {forgotMsg
+              ?<div style={{fontSize:12,padding:'10px',borderRadius:6,background:forgotMsg.startsWith('✅')?'#DCFCE7':'#FEE2E2',color:forgotMsg.startsWith('✅')?'#15803D':'#C8102E',marginBottom:10}}>{forgotMsg}</div>
+              :null
+            }
+            {!forgotMsg.startsWith('✅')&&<>
+              <div style={{fontSize:11,color:'#666',marginBottom:8}}>กรอกอีเมลที่ใช้ล็อกอิน ระบบจะส่งลิงก์รีเซ็ตรหัสผ่านให้</div>
+              <input style={{width:'100%',padding:'10px 12px',border:'1.5px solid #ddd',borderRadius:6,fontSize:14,fontFamily:'inherit',marginBottom:10,boxSizing:'border-box'}}
+                type="email" placeholder="อีเมล" value={email} onChange={e=>setEmail(e.target.value)}/>
+              <div style={{display:'flex',gap:8}}>
+                <button onClick={()=>{setForgotMode(false);setForgotMsg('');}} style={{flex:1,padding:'9px',background:'#E5E7EB',color:'#374151',border:'none',borderRadius:6,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>ยกเลิก</button>
+                <button onClick={doForgot} disabled={forgotLoading} style={{flex:2,padding:'9px',background:'#C8102E',color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontSize:12,fontFamily:'inherit',fontWeight:600}}>
+                  {forgotLoading?'⏳ กำลังส่ง...':'ส่ง email รีเซ็ต'}
+                </button>
+              </div>
+            </>}
+            {forgotMsg.startsWith('✅')&&<button onClick={()=>{setForgotMode(false);setForgotMsg('');}} style={{width:'100%',padding:'9px',background:'#E5E7EB',color:'#374151',border:'none',borderRadius:6,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>กลับหน้า Login</button>}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3870,6 +3975,7 @@ export default function App(){
   const [permissions,setPermissions] = useState({});
   const [authLoading,setAuthLoading] = useState(true);
   const [showChangePwd,setShowChangePwd] = useState(false);
+  const [resetMode,setResetMode]         = useState(false);  // reset via email link
   const [tab,setTab]         = useState('report');
   const [products,setProducts] = useState([]);
   const [stock,setStock]     = useState({});
@@ -3880,8 +3986,17 @@ export default function App(){
 
   // Check existing session
   useEffect(()=>{
+    // Check if this is a password reset redirect
+    const hash = window.location.hash;
+    if(hash.includes('type=recovery') || (hash.includes('access_token') && new URLSearchParams(window.location.search).get('reset')==='1')){
+      setResetMode(true); setAuthLoading(false); return;
+    }
     supabase.auth.getSession().then(async({data:{session}})=>{
       if(session?.user){
+        // Check if this is a recovery session
+        if(session.user.aud==='authenticated' && hash.includes('type=recovery')){
+          setResetMode(true); setAuthLoading(false); return;
+        }
         const {data:prof} = await supabase.from('profiles').select('*').eq('id',session.user.id).single();
         if(prof?.active){ setUser(session.user); setProfile(prof); }
         else { await supabase.auth.signOut(); }
@@ -4011,6 +4126,7 @@ export default function App(){
     </div>
   );
 
+  if(resetMode) return <ResetPasswordPage onDone={()=>{ setResetMode(false); window.history.replaceState(null,'',window.location.pathname); }}/>;
   if(!user||!profile) return <LoginPage onLogin={(u,p)=>{setUser(u);setProfile(p);}}/>;
 
   if(loading) return(
