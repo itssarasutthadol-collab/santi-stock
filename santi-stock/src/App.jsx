@@ -2502,6 +2502,9 @@ function UserManagePage({profile}){
   const [invRole,setInvRole]       = useState('sales');
   const [invPass,setInvPass]       = useState('');
   const [saving,setSaving] = useState(false);
+  const [resetTarget, setResetTarget] = useState(null);
+  const [resetPwd,    setResetPwd]    = useState('');
+  const [resetSaving, setResetSaving] = useState(false);
 
   // Staff commission form
   const [showStaff,setShowStaff]   = useState(false);
@@ -2545,6 +2548,18 @@ function UserManagePage({profile}){
     // Reload
     const {data:u} = await supabase.from('profiles').select('*').order('created_at');
     setUsers(u||[]);
+  };
+
+  const resetPassword = async () => {
+    if(!resetPwd || resetPwd.length < 6) { setMsg('❌ รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร'); return; }
+    setResetSaving(true);
+    const { error } = await supabase.rpc('admin_reset_user_password', {
+      target_user_id: resetTarget.id,
+      new_password: resetPwd,
+    });
+    if(error) { setMsg('❌ ' + error.message); setResetSaving(false); return; }
+    setMsg('✅ รีเซ็ตรหัสผ่านของ ' + (resetTarget.full_name||resetTarget.email) + ' เรียบร้อย');
+    setResetTarget(null); setResetPwd(''); setResetSaving(false);
   };
 
   const saveStaff = async () => {
@@ -2636,9 +2651,14 @@ function UserManagePage({profile}){
                   </td>
                   <td style={tdr(i)}>
                     {u.id!==profile.id&&(
-                      <button style={btn(u.active?'rd':'gr',{padding:'3px 10px',fontSize:11})} onClick={()=>toggleActive(u.id,u.active)}>
-                        {u.active?'ระงับ':'เปิดใช้'}
-                      </button>
+                      <div style={{display:'flex',gap:4}}>
+                        <button style={btn(u.active?'rd':'gr',{padding:'3px 10px',fontSize:11})} onClick={()=>toggleActive(u.id,u.active)}>
+                          {u.active?'ระงับ':'เปิดใช้'}
+                        </button>
+                        <button style={btn('am',{padding:'3px 10px',fontSize:11})} onClick={()=>{setResetTarget(u);setResetPwd('');}} title="รีเซ็ตรหัสผ่าน">
+                          🔑
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -2647,6 +2667,32 @@ function UserManagePage({profile}){
           </table>
         </div>
       </div>
+
+      {resetTarget&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:2000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div style={{background:'#fff',borderRadius:10,width:'100%',maxWidth:380,boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
+            <div style={{background:'#C8102E',padding:'14px 20px',borderRadius:'10px 10px 0 0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div style={{color:'#fff',fontWeight:700,fontSize:14}}>🔑 รีเซ็ตรหัสผ่าน</div>
+              <button onClick={()=>setResetTarget(null)} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',width:26,height:26,borderRadius:4,cursor:'pointer',fontSize:16,lineHeight:1}}>×</button>
+            </div>
+            <div style={{padding:20}}>
+              <div style={{fontSize:13,marginBottom:14,color:'#555'}}>
+                ตั้งรหัสผ่านใหม่ให้ <b style={{color:'#1A1A1A'}}>{resetTarget.full_name||resetTarget.email}</b>
+              </div>
+              <div style={{fontSize:12,color:'#666',marginBottom:5}}>รหัสผ่านใหม่ (อย่างน้อย 6 ตัวอักษร)</div>
+              <input type="password"
+                style={{width:'100%',padding:'10px 12px',border:'1.5px solid #ddd',borderRadius:6,fontSize:14,fontFamily:'inherit',marginBottom:16,boxSizing:'border-box',outline:'none'}}
+                placeholder="รหัสผ่านใหม่" value={resetPwd} onChange={e=>setResetPwd(e.target.value)} autoFocus/>
+              <div style={{display:'flex',gap:8}}>
+                <button onClick={()=>setResetTarget(null)} style={{flex:1,padding:'10px 0',background:'#E5E7EB',color:'#374151',border:'none',borderRadius:6,cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>ยกเลิก</button>
+                <button onClick={resetPassword} disabled={resetSaving} style={{flex:2,padding:'10px 0',background:resetSaving?'#999':'#C8102E',color:'#fff',border:'none',borderRadius:6,cursor:resetSaving?'not-allowed':'pointer',fontSize:13,fontFamily:'inherit',fontWeight:700}}>
+                  {resetSaving?'⏳ กำลังรีเซ็ต...':'💾 บันทึกรหัสผ่านใหม่'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Staff & Commission */}
       <div style={S.card}>
